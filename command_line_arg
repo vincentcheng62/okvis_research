@@ -30,3 +30,9 @@ side_28sec_20m_slowinit
 ../config/config_fpga_p2_euroc.yaml /home/vincent/Downloads/MH_01_easy/mav0
 
 ../config/config_fpga_p2_euroc.yaml /home/vincent/Downloads/V1_01_easy/mav0
+
+
+
+
+alignment
+1506569671result.txt /home/vincent/Documents/20170928154730.txt

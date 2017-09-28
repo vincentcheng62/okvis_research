@@ -7,7 +7,7 @@ find_package( Eigen REQUIRED )
 include_directories(${EIGEN_INCLUDE_DIR}) 
 
 # require OpenCV
-find_package( OpenCV COMPONENTS core highgui imgproc features2d REQUIRED )
+find_package( OpenCV COMPONENTS core highgui imgproc features2d calib3d REQUIRED )
 message("Initial value for ${OpenCV_VERSION}: ${OpenCV_LIBS}")
 include_directories(BEFORE ${OpenCV_INCLUDE_DIRS}) 
 message(STATUS "OpenCV include directory '${OpenCV_INCLUDE_DIRS}'")

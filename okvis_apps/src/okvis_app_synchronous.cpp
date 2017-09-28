@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <algorithm>
 #include <stdlib.h>
 #include <memory>
 #include <functional>
@@ -138,6 +139,7 @@ int AddImage(Image image, cv::Mat img)
 
     //
     img = cv::Mat(image.GetRows(), image.GetCols(), CV_8UC3, image.GetData());
+    return 0;
 }
 
 class PoseViewer
@@ -335,15 +337,191 @@ int main3(int argc, char **argv)
     return 0;
 }
 
-// this is just a workbench. most of the stuff here will go into the Frontend class.
+//Do the linear optimization between OKVIS output and AGV odometry
+//1st arg: okvis output
+//2nd arg: AGV odometry
 int main(int argc, char **argv)
+{
+    if (argc < 3)
+    {
+      std::cout << "Usage: ./" << argv[0] << " okvis_output agv_odometry";
+      std::cin.get();
+      return -1;
+    }
+
+    const double start_val_thd = 1e-3;
+    vector<cv::Point2f> okvis, agv_odo, agv_odo_sampled;
+    cv::Mat Homography_mat;
+
+    // open the OKVIS output
+    std::string line;
+    std::ifstream okvis_file(argv[1]);
+    if (!okvis_file.good()) {
+      std::cout << "no okvis_file file found at " << argv[1]<< std::endl;
+      std::cin.get();
+      return -1;
+    }
+
+    int number_of_lines = 0;
+    while (std::getline(okvis_file, line))
+    {
+      ++number_of_lines;
+    }
+    std::cout << "No. okvis_file lines: " << number_of_lines-1<< std::endl;
+
+    if (number_of_lines - 1 <= 0)
+    {
+      std::cout << "no okvis data present in " << argv[1]<< std::endl;
+      std::cin.get();
+      return -1;
+    }
+
+    // set reading position to second line
+    okvis_file.clear();
+    okvis_file.seekg(0, std::ios::beg); // beg:: beginning of the stream
+    std::getline(okvis_file, line); // skip a line
+
+    do {
+      if (!std::getline(okvis_file, line))
+      {
+        break;
+      }
+
+      //Data [pos_x, pos_y, pos_z, theta_x, theta_y, theta_z, vel_x, vel_y, vel_z]
+
+      std::stringstream stream(line);
+      std::string s_x, s_y;
+      std::getline(stream, s_x, ',');
+      std::getline(stream, s_y, ',');
+
+      double x_pos = std::stod(s_x);
+      double y_pos = std::stod(s_y);
+      if(fabs(x_pos)>start_val_thd && fabs(y_pos)>start_val_thd)
+      {
+          okvis.emplace_back(x_pos, y_pos);
+      }
+
+    } while (true);
+
+
+    // open the AGV odometry output
+    std::ifstream agvodo_file(argv[2]);
+    if (!agvodo_file.good()) {
+      std::cout << "no agvodo_file file found at " << argv[2]<< std::endl;
+      std::cin.get();
+      return -1;
+    }
+
+    while (std::getline(agvodo_file, line))
+    {
+      ++number_of_lines;
+    }
+    std::cout << "No. agvodo_file lines: " << number_of_lines-1<< std::endl;
+
+    if (number_of_lines - 1 <= 0)
+    {
+      std::cout << "no agv odometry data present in " << argv[2] << std::endl;
+      std::cin.get();
+      return -1;
+    }
+
+    // set reading position to first line
+    agvodo_file.clear();
+    agvodo_file.seekg(0, std::ios::beg); // beg:: beginning of the stream
+
+    do {
+      if (!std::getline(agvodo_file, line))
+      {
+        break;
+      }
+
+      //Data [counter time left_encoder right_encoder .... P: x_pos, y_pos, theta O: x_pos, y_pos, theta ....]
+      std::stringstream stream(line.substr(line.find("P:")+2));
+      std::string g_x, g_y, o_x, o_y, g_theta;
+      std::getline(stream, g_x, ',');
+      std::getline(stream, g_y, ',');
+
+      double x_globalpos = std::stod(g_x);
+      double y_globalpos = std::stod(g_y);
+
+      std::getline(stream, g_theta, 'O'); // got the theta
+      std::getline(stream, g_theta, ':'); // skip the O:
+      std::getline(stream, o_x, ',');
+      std::getline(stream, o_y, ',');
+
+      //Only consider those points where odometry start to drive away from zero
+      if(fabs(std::stod(o_x))>start_val_thd && fabs(std::stod(o_y))>start_val_thd)
+      {
+          agv_odo.emplace_back(x_globalpos, y_globalpos);
+      }
+
+    } while (true);
+
+    //Sampled the agv_odo to match with the size of okvis
+    std::cout << "okvis.size(): " << okvis.size() << std::endl;
+    std::cout << "agv_odo.size(): " << agv_odo.size() << std::endl;
+    double sampleratio = (double)(agv_odo.size())/((double)okvis.size());
+    std::cout << "Sample ratio: " << sampleratio << std::endl;
+
+    for(int i=0; i< okvis.size();i++)
+    {
+        int index = std::min((unsigned int)(i*sampleratio), (unsigned int)(agv_odo.size()-1));
+        agv_odo_sampled.push_back(agv_odo[index]);
+    }
+
+    Homography_mat = cv::findHomography(okvis, agv_odo_sampled);
+    std::cout << "Homography_mat: " << Homography_mat << std::endl;
+    std::cout << "Homography_mat.type(): " << Homography_mat.type() << std::endl;
+
+    //Transform okvis pt array using Homography_mat and save down the result
+    timespec starttime;
+    clock_gettime(CLOCK_REALTIME, &starttime);
+    std::stringstream filename;
+    filename << starttime.tv_sec << "alignresult.txt";
+    fp.open(filename.str(), ios::out);
+    if(!fp){
+        std::cout<<"Fail to open file: "<<std::endl;
+        std::cin.get();
+    }
+
+    fp << "wrapped_okvis_x, wrapped_okvis_y, agv_global_x, agv_global_y" << endl;
+
+    for(int i=0; i< okvis.size();i++)
+    {
+        cv::Mat pt(3,1, Homography_mat.type());
+        pt.at<float>(0) = okvis[i].x;
+        pt.at<float>(1) = okvis[i].y;
+        pt.at<float>(2) = 1;
+
+        cv::Mat wrapped_pt = Homography_mat*pt;
+
+        //cout << wrapped_pt.t() << endl;
+
+        fp << wrapped_pt.at<float>(0)/wrapped_pt.at<float>(2) << ", ";
+        fp << wrapped_pt.at<float>(1)/wrapped_pt.at<float>(2) << ", ";
+        fp << agv_odo_sampled[i].x << ", ";
+        fp << agv_odo_sampled[i].y << endl;
+    }
+
+    fp.close();
+
+    std::cout << "Success!" << std::endl;
+    std::cout << "Result is saved to " << filename.str() << std::endl;
+
+    return 0;
+}
+
+
+
+// this is just a workbench. most of the stuff here will go into the Frontend class.
+int main4(int argc, char **argv)
 {
   google::InitGoogleLogging(argv[0]);
   FLAGS_stderrthreshold = 0;  // INFO: 0, WARNING: 1, ERROR: 2, FATAL: 3
   FLAGS_colorlogtostderr = 1;
 
-  if (RUN_MODE == RUN_MODE_OFFLINE && argc < 3 ||
-       RUN_MODE == RUN_MODE_ONLINE && argc < 2 ) {
+  if ((RUN_MODE == RUN_MODE_OFFLINE && argc < 3) ||
+       (RUN_MODE == RUN_MODE_ONLINE && argc < 2) ) {
       // COMPACT_GOOGLE_LOG_ERROR.stream()
     LOG(ERROR)<<
     "Usage: ./" << argv[0] << " configuration-yaml-file dataset-folder [skip-first-seconds]";
