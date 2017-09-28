@@ -75,13 +75,15 @@ Frontend::Frontend(size_t numCameras)
       briskDetectionMaximumKeypoints_(450),
       briskDescriptionRotationInvariance_(true),
       briskDescriptionScaleInvariance_(false),
-      briskMatchingThreshold_(60.0),
+      briskMatchingThreshold_(60.0), // default 60.0
       matcher_(
           std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(4))),
-      keyframeInsertionOverlapThreshold_(0.6),
-      keyframeInsertionMatchingRatioThreshold_(0.2) {
-  // create mutexes for feature detectors and descriptor extractors
-  for (size_t i = 0; i < numCameras_; ++i) {
+      keyframeInsertionOverlapThreshold_(0.8), // 4efault 0.6, larger value make more keyframes
+      keyframeInsertionMatchingRatioThreshold_(0.4) { //default 0.2, larger value make more keyframes
+
+    // create mutexes for feature detectors and descriptor extractors
+  for (size_t i = 0; i < numCameras_; ++i)
+  {
     featureDetectorMutexes_.push_back(
         std::unique_ptr<std::mutex>(new std::mutex()));
   }
@@ -120,7 +122,9 @@ bool Frontend::dataAssociationAndInitialization(
     const okvis::VioParameters &params,
     const std::shared_ptr<okvis::MapPointVector> /*map*/, // TODO sleutenegger: why is this not used here?
     std::shared_ptr<okvis::MultiFrame> framesInOut,
-    bool *asKeyframe) {
+    bool *asKeyframe)
+{
+
   // match new keypoints to existing landmarks/keypoints
   // initialise new landmarks (states)
   // outlier rejection by consistency check
@@ -139,7 +143,8 @@ bool Frontend::dataAssociationAndInitialization(
   int num3dMatches = 0;
 
   // first frame? (did do addStates before, so 1 frame minimum in estimator)
-  if (estimator.numFrames() > 1) {
+  if (estimator.numFrames() > 1)
+  {
 
     int requiredMatches = 5;
 
@@ -181,15 +186,22 @@ bool Frontend::dataAssociationAndInitialization(
         break;
     }
     matchKeyframesTimer.stop();
-    if (!isInitialized_) {
-      if (!rotationOnly) {
+
+    if (!isInitialized_)
+    {
+      if (!rotationOnly)
+      {
         isInitialized_ = true;
-        LOG(INFO) << "Initialized!";
+        LOG(INFO) << "Initialized!!!!!!!!!!!!!";
+
+        //okvis::kinematics::Transformation T_WS;
+        //estimator.get_T_WS(framesInOut->id(), T_WS);
+
       }
     }
 
     if (num3dMatches <= requiredMatches) {
-      LOG(WARNING) << "Tracking failure. Number of 3d2d-matches: " << num3dMatches;
+      LOG(WARNING) << "Tracking failure. Number of 3d2d-matches: " << num3dMatches << " <= " << requiredMatches;
     }
 
     // keyframe decision, at the moment only landmarks that match with keyframe are initialised
@@ -231,8 +243,11 @@ bool Frontend::dataAssociationAndInitialization(
         break;
     }
     matchToLastFrameTimer.stop();
-  } else
+  }
+  else
+  {
     *asKeyframe = true;  // first frame needs to be keyframe
+  }
 
   // do stereo match to get new landmarks
   TimerSwitchable matchStereoTimer("2.4.3 matchStereo");
@@ -302,7 +317,10 @@ bool Frontend::doWeNeedANewKeyframe(
   }
 
   if (!isInitialized_)
-    return false;
+  {
+      LOG(INFO) << "Still not initialized!" ;
+        return false;
+  }
 
   double overlap = 0.0;
   double ratio = 0.0;
@@ -319,7 +337,9 @@ bool Frontend::doWeNeedANewKeyframe(
     frameBPoints.reserve(numB);
     frameBLandmarks.reserve(numB);
     Eigen::Vector2d keypoint;
-    for (size_t k = 0; k < numB; ++k) {
+
+    for (size_t k = 0; k < numB; ++k)
+    {
       currentFrame->getKeypoint(im, k, keypoint);
       // insert it
       frameBPoints.push_back(cv::Point2f(keypoint[0], keypoint[1]));
@@ -344,14 +364,17 @@ bool Frontend::doWeNeedANewKeyframe(
     double overlapArea = frameBMatchesArea / frameBArea;
     // matching ratio inside overlap area: count
     int pointsInFrameBMatchesArea = 0;
-    if (frameBMatchesHull.size() > 2) {
-      for (size_t k = 0; k < frameBPoints.size(); ++k) {
+    if (frameBMatchesHull.size() > 2)
+    {
+      for (size_t k = 0; k < frameBPoints.size(); ++k)
+      {
         if (cv::pointPolygonTest(frameBMatchesHull, frameBPoints[k], false)
             > 0) {
           pointsInFrameBMatchesArea++;
         }
       }
     }
+
     double matchingRatio = double(frameBMatches.size())
         / double(pointsInFrameBMatchesArea);
 
@@ -361,11 +384,20 @@ bool Frontend::doWeNeedANewKeyframe(
   }
 
   // take a decision
+  // overlap: hull of projected and matched landmark area v.s. image area
+  // ratio: matched v.s. detected keypoints ratio
+  LOG(INFO) << "overlap: " << overlap << ", ratio: " << ratio ;
   if (overlap > keyframeInsertionOverlapThreshold_
       && ratio > keyframeInsertionMatchingRatioThreshold_)
+  {
+    LOG(INFO) << "not add to keyframe" ;
     return false;
+  }
   else
+  {
+    LOG(INFO) << "add to keyframe" ;
     return true;
+  }
 }
 
 // Match a new multiframe to existing keyframes
@@ -376,10 +408,13 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
                                bool& rotationOnly,
                                bool usePoseUncertainty,
                                double* uncertainMatchFraction,
-                               bool removeOutliers) {
+                               bool removeOutliers)
+{
+  LOG(INFO) << "matchToKeyframes at frame" << currentFrameId;
   rotationOnly = true;
   if (estimator.numFrames() < 2) {
     // just starting, so yes, we need this as a new keyframe
+     LOG(INFO) << "estimator.numFrames() < 2, return 0";
     return 0;
   }
 
@@ -388,11 +423,14 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
 
   // go through all the frames and try to match the initialized keypoints
   size_t kfcounter = 0;
-  for (size_t age = 1; age < estimator.numFrames(); ++age) {
+  for (size_t age = 1; age < estimator.numFrames(); ++age)
+  {
     uint64_t olderFrameId = estimator.frameIdByAge(age);
     if (!estimator.isKeyframe(olderFrameId))
       continue;
-    for (size_t im = 0; im < params.nCameraSystem.numCameras(); ++im) {
+
+    for (size_t im = 0; im < params.nCameraSystem.numCameras(); ++im)
+    {
       MATCHING_ALGORITHM matchingAlgorithm(estimator,
                                            MATCHING_ALGORITHM::Match3D2D,
                                            briskMatchingThreshold_,
@@ -405,6 +443,7 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
       numUncertainMatches += matchingAlgorithm.numUncertainMatches();
 
     }
+
     kfcounter++;
     if (kfcounter > 2)
       break;
@@ -412,11 +451,14 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
 
   kfcounter = 0;
   bool firstFrame = true;
-  for (size_t age = 1; age < estimator.numFrames(); ++age) {
+  for (size_t age = 1; age < estimator.numFrames(); ++age)
+  {
     uint64_t olderFrameId = estimator.frameIdByAge(age);
     if (!estimator.isKeyframe(olderFrameId))
       continue;
-    for (size_t im = 0; im < params.nCameraSystem.numCameras(); ++im) {
+
+    for (size_t im = 0; im < params.nCameraSystem.numCameras(); ++im)
+    {
       MATCHING_ALGORITHM matchingAlgorithm(estimator,
                                            MATCHING_ALGORITHM::Match2D2D,
                                            briskMatchingThreshold_,
@@ -441,6 +483,7 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
       runRansac2d2d(estimator, params, currentFrameId, olderFrameId, true,
                     removeOutliers, rotationOnly_tmp);
     }
+
     if (firstFrame) {
       rotationOnly = rotationOnly_tmp;
       firstFrame = false;
@@ -448,7 +491,9 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
 
     kfcounter++;
     if (kfcounter > 1)
-      break;
+    {
+      break; // break when already encounter the last keyframe
+    }
   }
 
   // calculate fraction of safe matches
@@ -456,6 +501,8 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
     *uncertainMatchFraction = double(numUncertainMatches) / double(retCtr);
   }
 
+  LOG(INFO) << "Number of UncertainMatches: " << numUncertainMatches;
+  LOG(INFO) << "Number of matches: " << retCtr;
   return retCtr;
 }
 
@@ -465,9 +512,11 @@ int Frontend::matchToLastFrame(okvis::Estimator& estimator,
                                const okvis::VioParameters& params,
                                const uint64_t currentFrameId,
                                bool usePoseUncertainty,
-                               bool removeOutliers) {
-
+                               bool removeOutliers)
+{
+  LOG(INFO) << "matchToLastFrame at frame" << currentFrameId;
   if (estimator.numFrames() < 2) {
+    LOG(INFO) << "estimator.numFrames() < 2"  ;
     // just starting, so yes, we need this as a new keyframe
     return 0;
   }
@@ -475,13 +524,15 @@ int Frontend::matchToLastFrame(okvis::Estimator& estimator,
   uint64_t lastFrameId = estimator.frameIdByAge(1);
 
   if (estimator.isKeyframe(lastFrameId)) {
+      LOG(INFO) << "estimator.isKeyframe(lastFrameId), already done"  ;
     // already done
     return 0;
   }
 
   int retCtr = 0;
 
-  for (size_t im = 0; im < params.nCameraSystem.numCameras(); ++im) {
+  for (size_t im = 0; im < params.nCameraSystem.numCameras(); ++im)
+  {
     MATCHING_ALGORITHM matchingAlgorithm(estimator,
                                          MATCHING_ALGORITHM::Match3D2D,
                                          briskMatchingThreshold_,
@@ -496,7 +547,8 @@ int Frontend::matchToLastFrame(okvis::Estimator& estimator,
   runRansac3d2d(estimator, params.nCameraSystem,
                 estimator.multiFrame(currentFrameId), removeOutliers);
 
-  for (size_t im = 0; im < params.nCameraSystem.numCameras(); ++im) {
+  for (size_t im = 0; im < params.nCameraSystem.numCameras(); ++im)
+  {
     MATCHING_ALGORITHM matchingAlgorithm(estimator,
                                          MATCHING_ALGORITHM::Match2D2D,
                                          briskMatchingThreshold_,
@@ -514,6 +566,7 @@ int Frontend::matchToLastFrame(okvis::Estimator& estimator,
     runRansac2d2d(estimator, params, currentFrameId, lastFrameId, false,
                   removeOutliers, rotationOnly);
 
+  LOG(INFO) << "Number of matches: " << retCtr;
   return retCtr;
 }
 
@@ -525,8 +578,12 @@ void Frontend::matchStereo(okvis::Estimator& estimator,
   const size_t camNumber = multiFrame->numFrames();
   const uint64_t mfId = multiFrame->id();
 
-  for (size_t im0 = 0; im0 < camNumber; im0++) {
-    for (size_t im1 = im0 + 1; im1 < camNumber; im1++) {
+  LOG(INFO) << "Do matchStereo at frame " << mfId;
+
+  for (size_t im0 = 0; im0 < camNumber; im0++)
+  {
+    for (size_t im1 = im0 + 1; im1 < camNumber; im1++)
+    {
       // first, check the possibility for overlap
       // FIXME: implement this in the Multiframe...!!
 
@@ -560,9 +617,12 @@ void Frontend::matchStereo(okvis::Estimator& estimator,
 
   // TODO: no RANSAC ?
 
-  for (size_t im = 0; im < camNumber; im++) {
+  for (size_t im = 0; im < camNumber; im++)
+  {
     const size_t ksize = multiFrame->numKeypoints(im);
-    for (size_t k = 0; k < ksize; ++k) {
+
+    for (size_t k = 0; k < ksize; ++k)
+    {
       if (multiFrame->landmarkId(im, k) != 0) {
         continue;  // already identified correspondence
       }
@@ -575,11 +635,17 @@ void Frontend::matchStereo(okvis::Estimator& estimator,
 int Frontend::runRansac3d2d(okvis::Estimator& estimator,
                             const okvis::cameras::NCameraSystem& nCameraSystem,
                             std::shared_ptr<okvis::MultiFrame> currentFrame,
-                            bool removeOutliers) {
+                            bool removeOutliers)
+{
+
+  LOG(INFO) << "Perform 3D/2D RANSAC at frame" << currentFrame->id();
   if (estimator.numFrames() < 2) {
     // nothing to match against, we are just starting up.
+    LOG(INFO) <<  "nothing to match against, we are just starting up.";
     return 1;
   }
+
+
 
   /////////////////////
   //   KNEIP RANSAC
@@ -593,8 +659,10 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
 
   size_t numCorrespondences = adapter.getNumberCorrespondences();
   if (numCorrespondences < 5)
+  {
+    LOG(INFO) << "numCorrespondences: " << numCorrespondences << " < 5";
     return numCorrespondences;
-
+  }
   // create a RelativePoseSac problem and RANSAC
   opengv::sac::Ransac<
       opengv::sac_problems::absolute_pose::FrameAbsolutePoseSacProblem> ransac;
@@ -604,15 +672,18 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
           adapter,
           opengv::sac_problems::absolute_pose::FrameAbsolutePoseSacProblem::Algorithm::GP3P));
   ransac.sac_model_ = absposeproblem_ptr;
-  ransac.threshold_ = 9;
-  ransac.max_iterations_ = 50;
+  ransac.threshold_ = 9; // threshold angle between measure vector and reprojected vector
+  ransac.max_iterations_ = 1000; // default: 50
   // initial guess not needed...
   // run the ransac
   ransac.computeModel(0);
 
   // assign transformation
   numInliers = ransac.inliers_.size();
-  if (numInliers >= 10) {
+  LOG(INFO) <<   "numInliers: " << numInliers;
+
+  if (numInliers >= 10)
+  {
 
     // kick out outliers:
     std::vector<bool> inliers(numCorrespondences, false);
@@ -620,7 +691,8 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
       inliers.at(ransac.inliers_.at(k)) = true;
     }
 
-    for (size_t k = 0; k < numCorrespondences; ++k) {
+    for (size_t k = 0; k < numCorrespondences; ++k)
+    {
       if (!inliers[k]) {
         // get the landmark id:
         size_t camIdx = adapter.camIndex(k);
@@ -647,7 +719,10 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
                             uint64_t currentFrameId, uint64_t olderFrameId,
                             bool initializePose,
                             bool removeOutliers,
-                            bool& rotationOnly) {
+                            bool& rotationOnly)
+{
+
+  LOG(INFO) << "Perform 2D/2D RANSAC at frame" << currentFrameId;
   // match 2d2d
   rotationOnly = false;
   const size_t numCameras = params.nCameraSystem.numCameras();
@@ -657,7 +732,8 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
   bool rel_pose_success = false;
 
   // run relative RANSAC
-  for (size_t im = 0; im < numCameras; ++im) {
+  for (size_t im = 0; im < numCameras; ++im)
+  {
 
     // relative pose adapter for Kneip toolchain
     opengv::relative_pose::FrameRelativeAdapter adapter(estimator,
@@ -668,8 +744,10 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
     size_t numCorrespondences = adapter.getNumberCorrespondences();
 
     if (numCorrespondences < 10)
+    {
+      LOG(INFO) << "numCorrespondences: " << numCorrespondences << " < 10";
       continue;  // won't generate meaningful results. let's hope the few correspondences we have are all inliers!!
-
+    }
     // try both the rotation-only RANSAC and the relative one:
 
     // create a RelativePoseSac problem and RANSAC
@@ -679,7 +757,7 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
         new FrameRotationOnlySacProblem(adapter));
     rotation_only_ransac.sac_model_ = rotation_only_problem_ptr;
     rotation_only_ransac.threshold_ = 9;
-    rotation_only_ransac.max_iterations_ = 50;
+    rotation_only_ransac.max_iterations_ = 1000; // default: 50
 
     // run the ransac
     rotation_only_ransac.computeModel(0);
@@ -689,15 +767,19 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
     float rotation_only_ratio = float(rotation_only_inliers)
         / float(numCorrespondences);
 
+    LOG(INFO) << "rotation_only_inliers: " << rotation_only_inliers;
+    LOG(INFO) << "rotation_only_ratio: " << rotation_only_ratio;
+
     // now the rel_pose one:
     typedef opengv::sac_problems::relative_pose::FrameRelativePoseSacProblem FrameRelativePoseSacProblem;
     opengv::sac::Ransac<FrameRelativePoseSacProblem> rel_pose_ransac;
     std::shared_ptr<FrameRelativePoseSacProblem> rel_pose_problem_ptr(
         new FrameRelativePoseSacProblem(
             adapter, FrameRelativePoseSacProblem::STEWENIUS));
+
     rel_pose_ransac.sac_model_ = rel_pose_problem_ptr;
     rel_pose_ransac.threshold_ = 9;     //(1.0 - cos(0.5/600));
-    rel_pose_ransac.max_iterations_ = 50;
+    rel_pose_ransac.max_iterations_ = 1000; // default: 50
 
     // run the ransac
     rel_pose_ransac.computeModel(0);
@@ -705,30 +787,43 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
     // assess success
     int rel_pose_inliers = rel_pose_ransac.inliers_.size();
     float rel_pose_ratio = float(rel_pose_inliers) / float(numCorrespondences);
+    LOG(INFO) << "rel_pose_inliers: " << rel_pose_inliers;
+    LOG(INFO) << "rel_pose_ratio: " << rel_pose_ratio;
+
 
     // decide on success and fill inliers
     std::vector<bool> inliers(numCorrespondences, false);
-    if (rotation_only_ratio > rel_pose_ratio || rotation_only_ratio > 0.8) {
+    if (rotation_only_ratio > rel_pose_ratio || rotation_only_ratio > 0.8) // default 0.8
+    {
       if (rotation_only_inliers > 10) {
         rotation_only_success = true;
       }
       rotationOnly = true;
+      LOG(INFO) << "rotation_only_ratio > rel_pose_ratio || rotation_only_ratio > 0.8, rotationOnly = true";
+
       totalInlierNumber += rotation_only_inliers;
-      for (size_t k = 0; k < rotation_only_ransac.inliers_.size(); ++k) {
+      for (size_t k = 0; k < rotation_only_ransac.inliers_.size(); ++k)
+      {
         inliers.at(rotation_only_ransac.inliers_.at(k)) = true;
       }
-    } else {
+    }
+    else
+    {
       if (rel_pose_inliers > 10) {
         rel_pose_success = true;
+        LOG(INFO) << "rel_pose_success = true";
       }
+
       totalInlierNumber += rel_pose_inliers;
-      for (size_t k = 0; k < rel_pose_ransac.inliers_.size(); ++k) {
+      for (size_t k = 0; k < rel_pose_ransac.inliers_.size(); ++k)
+      {
         inliers.at(rel_pose_ransac.inliers_.at(k)) = true;
       }
     }
 
     // failure?
     if (!rotation_only_success && !rel_pose_success) {
+      LOG(INFO) << "!rotation_only_success && !rel_pose_success";
       continue;
     }
 
@@ -736,7 +831,8 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
     std::shared_ptr<okvis::MultiFrame> multiFrame = estimator.multiFrame(
         currentFrameId);
 
-    for (size_t k = 0; k < numCorrespondences; ++k) {
+    for (size_t k = 0; k < numCorrespondences; ++k)
+    {
       size_t idxB = adapter.getMatchKeypointIdxB(k);
       if (!inliers[k]) {
 
@@ -753,7 +849,8 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
     }
 
     // initialize pose if necessary
-    if (initializePose && !isInitialized_) {
+    if (initializePose && !isInitialized_)
+    {
       if (rel_pose_success)
         LOG(INFO)
             << "Initializing pose from 2D-2D RANSAC";
@@ -801,7 +898,9 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
 
   if (rel_pose_success || rotation_only_success)
     return totalInlierNumber;
-  else {
+  else
+  {
+    LOG(INFO) << "both rel_pose_success and rotation_only_success are false! HACK!";
     rotationOnly = true;  // hack...
     return -1;
   }

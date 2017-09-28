@@ -81,7 +81,7 @@ class FrameRotationOnlySacProblem : public RotationOnlySacProblem {
    * @warning Only okvis::relative_pose::FrameRelativeAdapter supported.
    */
   FrameRotationOnlySacProblem(adapter_t & adapter)
-      : base_t(adapter),
+      : base_t(adapter, false),
         adapterDerived_(
             *static_cast<opengv::relative_pose::FrameRelativeAdapter*>(&_adapter)) {
     OKVIS_ASSERT_TRUE(
@@ -99,7 +99,7 @@ class FrameRotationOnlySacProblem : public RotationOnlySacProblem {
    */
   FrameRotationOnlySacProblem(adapter_t & adapter,
                               const std::vector<int> & indices)
-      : base_t(adapter, indices),
+      : base_t(adapter, indices, false),
         adapterDerived_(
             *static_cast<opengv::relative_pose::FrameRelativeAdapter*>(&_adapter)) {
     OKVIS_ASSERT_TRUE(

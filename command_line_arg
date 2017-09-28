@@ -1,0 +1,32 @@
+../config/config_me2.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1505716861
+
+
+//top view loop
+../config/config_me2_inv_mancalib.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1505725799
+
+//ceiling 4 rounds
+../config/config_me2_inv_mancalib.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1505805703
+
+//ceiling 24sec loop
+../config/config_me2_inv_mancalib.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1506393299
+
+//ceiling 28sec loop slow init 
+../config/config_me2_inv_mancalib.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1506406369
+
+//ceiling of fuyong 2 mins
+../config/config_me2_inv_mancalib.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1506484411
+
+side view loop
+../config/config_me2_inv_mancalib.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1505790275
+
+side_28sec_20m_slowinit
+../config/config_me2_inv_mancalib.yaml /home/vincent/okvis/side_28sec_20m_slowinit
+
+
+
+
+
+
+../config/config_fpga_p2_euroc.yaml /home/vincent/Downloads/MH_01_easy/mav0
+
+../config/config_fpga_p2_euroc.yaml /home/vincent/Downloads/V1_01_easy/mav0

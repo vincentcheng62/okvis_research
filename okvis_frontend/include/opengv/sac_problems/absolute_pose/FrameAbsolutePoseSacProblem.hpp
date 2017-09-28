@@ -87,7 +87,7 @@ class FrameAbsolutePoseSacProblem : public AbsolutePoseSacProblem {
    * @warning Only okvis::absolute_pose::FrameNoncentralAbsoluteAdapter supported.
    */
   FrameAbsolutePoseSacProblem(adapter_t & adapter, algorithm_t algorithm)
-      : base_t(adapter, algorithm),
+      : base_t(adapter, algorithm, false),
         adapterDerived_(
             *static_cast<opengv::absolute_pose::FrameNoncentralAbsoluteAdapter*>(&_adapter)) {
     OKVIS_ASSERT_TRUE(
@@ -106,7 +106,7 @@ class FrameAbsolutePoseSacProblem : public AbsolutePoseSacProblem {
    */
   FrameAbsolutePoseSacProblem(adapter_t & adapter, algorithm_t algorithm,
                               const std::vector<int> & indices)
-      : base_t(adapter, algorithm, indices),
+      : base_t(adapter, algorithm, indices, false),
         adapterDerived_(
             *static_cast<opengv::absolute_pose::FrameNoncentralAbsoluteAdapter*>(&_adapter)) {
     OKVIS_ASSERT_TRUE(

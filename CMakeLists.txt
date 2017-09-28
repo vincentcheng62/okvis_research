@@ -8,6 +8,8 @@ set(OKVIS_PATCH_VERSION 3)
 set(OKVIS_VERSION
   ${OKVIS_MAJOR_VERSION}.${OKVIS_MINOR_VERSION}.${OKVIS_PATCH_VERSION})
 
+set(CMAKE_BUILD_TYPE Release)
+
 # options for build configuration
 option (USE_SYSTEM_BRISK
         "Use brisk via find_package rather than downloading it as part of okvis" OFF) 
@@ -235,6 +237,7 @@ set(OpenGV_LIBRARIES opengv)
 set_target_properties(opengv PROPERTIES IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/lib/libopengv.a)
 add_dependencies(${OpenGV_LIBRARIES} opengv_external)
 
+
 # install it once built
 install(FILES ${CMAKE_BINARY_DIR}/lib/libopengv.a 
   DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
@@ -317,6 +320,15 @@ if(BUILD_APPS)
   FIND_PACKAGE(Boost COMPONENTS filesystem system REQUIRED)
   include_directories(${Boost_INCLUDE_DIRS}) 
   add_executable(okvis_app_synchronous okvis_apps/src/okvis_app_synchronous.cpp)
+  link_directories("/home/vincent/flycapture/lib")
+
+  # change .pro config for receiving imu and camera data
+  FIND_PACKAGE(Qt5Core  COMPONENTS Qt5SerialPort REQUIRED)
+  #include_directories(${QT_INCLUDE_DIR})
+  include_directories("/home/vincent/flycapture/include")
+  include_directories("/usr/include/flycapture")
+  include_directories(okvis_apps/include)
+
   target_link_libraries(okvis_app_synchronous 
     okvis_util
     okvis_kinematics
@@ -330,10 +342,12 @@ if(BUILD_APPS)
     okvis_multisensor_processing
     pthread 
     ${Boost_LIBRARIES}
+    flycapture${D} ${FC2_DEPS}
   )
   if(${VISENSORDRIVER_FOUND})
     target_link_libraries(okvis_app_synchronous ${VISensorDriver_LIBRARY})
   endif()
+  qt5_use_modules(okvis_app_synchronous Core SerialPort) # to use QSerialPort
   install(TARGETS okvis_app_synchronous
     # IMPORTANT: Add the executable to the "export-set"
     EXPORT okvisTargets

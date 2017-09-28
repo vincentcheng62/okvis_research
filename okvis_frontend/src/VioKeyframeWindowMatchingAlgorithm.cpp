@@ -125,18 +125,25 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup() {
   // first, let's get the relative uncertainty.
   okvis::kinematics::Transformation T_CaCb;
   Eigen::Matrix<double, 6, 6> UOplus = Eigen::Matrix<double, 6, 6>::Zero();
+
   if (usePoseUncertainty_) {
     OKVIS_THROW(Exception, "No pose uncertainty use currently supported");
-  } else {
+  }
+  else
+  {
     UOplus.setIdentity();
     UOplus.bottomRightCorner<3, 3>() *= 1e-8;
     uint64_t currentId = estimator_->currentFrameId();
-    if (estimator_->isInImuWindow(currentId) && (mfIdA_ != mfIdB_)) {
+
+    if (estimator_->isInImuWindow(currentId) && (mfIdA_ != mfIdB_))
+    {
       okvis::SpeedAndBias speedAndBias;
       estimator_->getSpeedAndBias(currentId, 0, speedAndBias);
       double scale = std::max(1.0, speedAndBias.head<3>().norm());
       UOplus.topLeftCorner<3, 3>() *= (scale * scale) * 1.0e-2;
-    } else {
+    }
+    else
+    {
       UOplus.topLeftCorner<3, 3>() *= 4e-8;
     }
   }
@@ -153,8 +160,10 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup() {
   skipA_.clear();
   skipA_.resize(numA, false);
   raySigmasA_.resize(numA);
+
   // calculate projections only once
-  if (matchingType_ == Match3D2D) {
+  if (matchingType_ == Match3D2D)
+  {
     // allocate a matrix to store projections
     projectionsIntoB_ = Eigen::Matrix<double, Eigen::Dynamic, 2>::Zero(sizeA(),
                                                                        2);
@@ -213,7 +222,9 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup() {
       keypointAStdDev = 0.8 * keypointAStdDev / 12.0;
       raySigmasA_[k] = sqrt(sqrt(2)) * keypointAStdDev / fA_;  // (sqrt(MeasurementCovariance.norm()) / _fA)
     }
-  } else {
+  }
+  else
+  {
     for (size_t k = 0; k < numA; ++k) {
       double keypointAStdDev;
       frameA_->getKeypointSize(camIdA_, k, keypointAStdDev);
@@ -234,8 +245,10 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup() {
   skipB_.clear();
   skipB_.reserve(numB);
   raySigmasB_.resize(numB);
+
   // do the projections for each keypoint, if applicable
-  if (matchingType_ == Match3D2D) {
+  if (matchingType_ == Match3D2D)
+  {
     for (size_t k = 0; k < numB; ++k) {
       okvis::MapPoint landmark;
       if (frameB_->landmarkId(camIdB_, k) != 0
@@ -253,7 +266,9 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup() {
       keypointBStdDev = 0.8 * keypointBStdDev / 12.0;
       raySigmasB_[k] = sqrt(sqrt(2)) * keypointBStdDev / fB_;
     }
-  } else {
+  }
+  else
+  {
     for (size_t k = 0; k < numB; ++k) {
       double keypointBStdDev;
       frameB_->getKeypointSize(camIdB_, k, keypointBStdDev);
