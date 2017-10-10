@@ -72,7 +72,8 @@ void VioVisualizer::init(okvis::VioParameters& parameters) {
 }
 
 cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
-                                   size_t image_number) {
+                                   size_t image_number)
+{
 
   std::shared_ptr<okvis::MultiFrame> keyframe = data->keyFrames;
   std::shared_ptr<okvis::MultiFrame> frame = data->currentFrames;
@@ -102,38 +103,43 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
   // find distortion type
   okvis::cameras::NCameraSystem::DistortionType distortionType = parameters_.nCameraSystem
       .distortionType(0);
-  for (size_t i = 1; i < parameters_.nCameraSystem.numCameras(); ++i) {
+  for (size_t i = 1; i < parameters_.nCameraSystem.numCameras(); ++i)
+  {
     OKVIS_ASSERT_TRUE(Exception,
                       distortionType == parameters_.nCameraSystem.distortionType(i),
                       "mixed frame types are not supported yet");
   }
 
-  for (auto it = data->observations.begin(); it != data->observations.end();
-      ++it) {
+  //observation contains all the keypoint information after each optimization loop
+  for (auto it = data->observations.begin(); it != data->observations.end(); ++it)
+  {
     if (it->cameraIdx != image_number)
       continue;
 
     cv::Scalar color;
 
     if (it->landmarkId != 0) {
-      color = cv::Scalar(255, 0, 0);  // blue
+      color = cv::Scalar(255, 0, 0);  // blue: left-right stereo match
     } else {
-      color = cv::Scalar(0, 0, 255);  // red
+      color = cv::Scalar(0, 0, 255);  // red: unmatched
     }
 
     // draw matches to keyframe
     keypoint = it->keypointMeasurement;
-    if (fabs(it->landmark_W[3]) > 1.0e-8) {
+    if (fabs(it->landmark_W[3]) > 1.0e-8) // landmark_W: landmark as homogeneous point in body frame B, landmark_W[3]==0 means the point in infinity
+    {
       Eigen::Vector4d hPoint = it->landmark_W;
       if (it->isInitialized) {
-        color = cv::Scalar(0, 255, 0);  // green
+        color = cv::Scalar(0, 255, 0);  // green: 3D-2D match
       } else {
-        color = cv::Scalar(0, 255, 255);  // yellow
+        color = cv::Scalar(0, 255, 255);  // yellow: 2D-2D match
       }
+
       Eigen::Vector2d keyframePt;
       bool isVisibleInKeyframe = false;
       Eigen::Vector4d hP_C = lastKeyframeT_CW * hPoint;
-      switch (distortionType) {
+      switch (distortionType)
+      {
         case okvis::cameras::NCameraSystem::RadialTangential: {
           if (frame
               ->geometryAs<
@@ -168,35 +174,40 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
           OKVIS_THROW(Exception, "Unsupported distortion type.")
           break;
       }
+
       if (fabs(hP_C[3]) > 1.0e-8) {
         if (hP_C[2] / hP_C[3] < 0.4) {
           isVisibleInKeyframe = false;
         }
       }
 
-      if (isVisibleInKeyframe) {
+      //Only when the keypoint is both visible in keyframe and current frame will draw a matching line
+      if (isVisibleInKeyframe)
+      {
         // found in the keyframe. draw line
         cv::line(outimg, cv::Point2f(keyframePt[0], keyframePt[1]),
                  cv::Point2f(keypoint[0], keypoint[1] + rowJump), color, 1,
                  CV_AA);
+        // Draw circle in upper image (i.e. last key frame)
         cv::circle(actKeyframe, cv::Point2f(keyframePt[0], keyframePt[1]),
                    0.5 * it->keypointSize, color, 1, CV_AA);
       }
     }
-    // draw keypoint
+
+    // draw keypoint on the bottom image, put it here, since no left-right stereo match at all
     const double r = 0.5 * it->keypointSize;
-    cv::circle(current, cv::Point2f(keypoint[0], keypoint[1]), r, color, 1,
-    CV_AA);
+    cv::circle(current, cv::Point2f(keypoint[0], keypoint[1]), r, color, 1, CV_AA);
+
+    //Also draw the keypoint direction
     cv::KeyPoint cvKeypoint;
     frame->getCvKeypoint(image_number, it->keypointIdx, cvKeypoint);
     const double angle = cvKeypoint.angle / 180.0 * M_PI;
-    cv::line(
-        outimg,
+    cv::line( outimg,
         cv::Point2f(keypoint[0], keypoint[1] + rowJump),
         cv::Point2f(keypoint[0], keypoint[1] + rowJump)
             + cv::Point2f(cos(angle), sin(angle)) * r,
-        color, 1,
-        CV_AA);
+        color, 1, CV_AA);
+
   }
   return outimg;
 }

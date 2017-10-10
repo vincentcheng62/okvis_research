@@ -238,6 +238,7 @@ struct Optimization{
   double timeLimitForMatchingAndOptimization; ///< The time limit for both matching and optimization. [s]
   okvis::Duration timeReserve; ///< Store a little more on the beginning and end of the IMU buffer. [s]
   double detectionThreshold;  ///< Keypoint detection threshold.
+  double detectionMatchingThreshold;
   bool useMedianFilter;     ///< Use a Median filter over captured image?
   int detectionOctaves;     ///< Number of keypoint detection octaves.
   int maxNoKeypoints;       ///< Restrict to a maximum of this many keypoints per image (strongest ones).

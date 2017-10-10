@@ -343,20 +343,25 @@ bool Estimator::addStates(
 }
 
 // Add a landmark.
+// Only called in VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch()
 bool Estimator::addLandmark(uint64_t landmarkId,
-                            const Eigen::Vector4d & landmark) {
+                            const Eigen::Vector4d & landmark)
+{
   std::shared_ptr<okvis::ceres::HomogeneousPointParameterBlock> pointParameterBlock(
       new okvis::ceres::HomogeneousPointParameterBlock(landmark, landmarkId));
   if (!mapPtr_->addParameterBlock(pointParameterBlock,
-                                  okvis::ceres::Map::HomogeneousPoint)) {
+                                  okvis::ceres::Map::HomogeneousPoint))
+  {
     return false;
   }
 
   // remember
   double dist = std::numeric_limits<double>::max();
-  if(fabs(landmark[3])>1.0e-8){
+  if(fabs(landmark[3])>1.0e-8)
+  {
     dist = (landmark/landmark[3]).head<3>().norm(); // euclidean distance
   }
+
   landmarksMap_.insert(
       std::pair<uint64_t, MapPoint>(
           landmarkId, MapPoint(landmarkId, landmark, 0.0, dist)));
@@ -943,7 +948,8 @@ bool Estimator::getLandmark(uint64_t landmarkId,
 }
 
 // Checks whether the landmark is initialized.
-bool Estimator::isLandmarkInitialized(uint64_t landmarkId) const {
+bool Estimator::isLandmarkInitialized(uint64_t landmarkId) const
+{
   OKVIS_ASSERT_TRUE_DBG(Exception, isLandmarkAdded(landmarkId),
                      "landmark not added");
   return std::static_pointer_cast<okvis::ceres::HomogeneousPointParameterBlock>(

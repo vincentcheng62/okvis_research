@@ -77,8 +77,8 @@ Frontend::Frontend(size_t numCameras)
       briskDescriptionScaleInvariance_(false),
       briskMatchingThreshold_(60.0), // default 60.0
       matcher_(
-          std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(4))),
-      keyframeInsertionOverlapThreshold_(0.8), // 4efault 0.6, larger value make more keyframes
+          std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(4))), // default 4: 4 matcher threads
+      keyframeInsertionOverlapThreshold_(0.8), // default 0.6, larger value make more keyframes
       keyframeInsertionMatchingRatioThreshold_(0.4) { //default 0.2, larger value make more keyframes
 
     // create mutexes for feature detectors and descriptor extractors
@@ -153,8 +153,10 @@ bool Frontend::dataAssociationAndInitialization(
 
     // match to last keyframe
     TimerSwitchable matchKeyframesTimer("2.4.1 matchToKeyframes");
-    switch (distortionType) {
-      case okvis::cameras::NCameraSystem::RadialTangential: {
+    switch (distortionType)
+    {
+      case okvis::cameras::NCameraSystem::RadialTangential:
+      {
         num3dMatches = matchToKeyframes<
             VioKeyframeWindowMatchingAlgorithm<
                 okvis::cameras::PinholeCamera<
@@ -163,7 +165,8 @@ bool Frontend::dataAssociationAndInitialization(
             &uncertainMatchFraction);
         break;
       }
-      case okvis::cameras::NCameraSystem::Equidistant: {
+      case okvis::cameras::NCameraSystem::Equidistant:
+      {
         num3dMatches = matchToKeyframes<
             VioKeyframeWindowMatchingAlgorithm<
                 okvis::cameras::PinholeCamera<
@@ -172,7 +175,8 @@ bool Frontend::dataAssociationAndInitialization(
             &uncertainMatchFraction);
         break;
       }
-      case okvis::cameras::NCameraSystem::RadialTangential8: {
+      case okvis::cameras::NCameraSystem::RadialTangential8:
+      {
         num3dMatches = matchToKeyframes<
             VioKeyframeWindowMatchingAlgorithm<
                 okvis::cameras::PinholeCamera<
@@ -209,8 +213,10 @@ bool Frontend::dataAssociationAndInitialization(
 
     // match to last frame
     TimerSwitchable matchToLastFrameTimer("2.4.2 matchToLastFrame");
-    switch (distortionType) {
-      case okvis::cameras::NCameraSystem::RadialTangential: {
+    switch (distortionType)
+    {
+      case okvis::cameras::NCameraSystem::RadialTangential:
+      {
         matchToLastFrame<
             VioKeyframeWindowMatchingAlgorithm<
                 okvis::cameras::PinholeCamera<
@@ -219,7 +225,8 @@ bool Frontend::dataAssociationAndInitialization(
             false);
         break;
       }
-      case okvis::cameras::NCameraSystem::Equidistant: {
+      case okvis::cameras::NCameraSystem::Equidistant:
+      {
         matchToLastFrame<
             VioKeyframeWindowMatchingAlgorithm<
                 okvis::cameras::PinholeCamera<
@@ -228,7 +235,8 @@ bool Frontend::dataAssociationAndInitialization(
             false);
         break;
       }
-      case okvis::cameras::NCameraSystem::RadialTangential8: {
+      case okvis::cameras::NCameraSystem::RadialTangential8:
+      {
         matchToLastFrame<
             VioKeyframeWindowMatchingAlgorithm<
                 okvis::cameras::PinholeCamera<
@@ -251,8 +259,10 @@ bool Frontend::dataAssociationAndInitialization(
 
   // do stereo match to get new landmarks
   TimerSwitchable matchStereoTimer("2.4.3 matchStereo");
-  switch (distortionType) {
-    case okvis::cameras::NCameraSystem::RadialTangential: {
+  switch (distortionType)
+  {
+    case okvis::cameras::NCameraSystem::RadialTangential:
+    {
       matchStereo<
           VioKeyframeWindowMatchingAlgorithm<
               okvis::cameras::PinholeCamera<
@@ -260,7 +270,8 @@ bool Frontend::dataAssociationAndInitialization(
                                                                   framesInOut);
       break;
     }
-    case okvis::cameras::NCameraSystem::Equidistant: {
+    case okvis::cameras::NCameraSystem::Equidistant:
+    {
       matchStereo<
           VioKeyframeWindowMatchingAlgorithm<
               okvis::cameras::PinholeCamera<
@@ -268,7 +279,8 @@ bool Frontend::dataAssociationAndInitialization(
                                                              framesInOut);
       break;
     }
-    case okvis::cameras::NCameraSystem::RadialTangential8: {
+    case okvis::cameras::NCameraSystem::RadialTangential8:
+    {
       matchStereo<
           VioKeyframeWindowMatchingAlgorithm<
               okvis::cameras::PinholeCamera<
@@ -629,6 +641,8 @@ void Frontend::matchStereo(okvis::Estimator& estimator,
       multiFrame->setLandmarkId(im, k, okvis::IdProvider::instance().newId());
     }
   }
+
+
 }
 
 // Perform 3D/2D RANSAC.
@@ -693,7 +707,8 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
 
     for (size_t k = 0; k < numCorrespondences; ++k)
     {
-      if (!inliers[k]) {
+      if (!inliers[k])
+      {
         // get the landmark id:
         size_t camIdx = adapter.camIndex(k);
         size_t keypointIdx = adapter.keypointIndex(k);
@@ -709,6 +724,7 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
         }
       }
     }
+
   }
   return numInliers;
 }
@@ -834,13 +850,15 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
     for (size_t k = 0; k < numCorrespondences; ++k)
     {
       size_t idxB = adapter.getMatchKeypointIdxB(k);
-      if (!inliers[k]) {
+      if (!inliers[k])
+      {
 
         uint64_t lmId = multiFrame->landmarkId(im, k);
         // reset ID:
         multiFrame->setLandmarkId(im, k, 0);
         // remove observation
-        if (removeOutliers) {
+        if (removeOutliers)
+        {
           if (lmId != 0 && estimator.isLandmarkAdded(lmId)){
             estimator.removeObservation(lmId, currentFrameId, im, idxB);
           }
@@ -867,7 +885,9 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
       estimator.get_T_WS(idA, T_WSA);
       estimator.getCameraSensorStates(id0, im, T_SC0);
       estimator.get_T_WS(id0, T_WS0);
-      if (rel_pose_success) {
+
+      if (rel_pose_success)
+      {
         // update pose
         // if the IMU is used, this will be quickly optimized to the correct scale. Hopefully.
         T_C1C2_mat.topLeftCorner<3, 4>() = rel_pose_ransac.model_coefficients_;
@@ -877,12 +897,11 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
         okvis::kinematics::Transformation T_C1C2 = T_SCA.inverse()
             * T_WSA.inverse() * T_WS0 * T_SC0;
         T_C1C2_mat.topRightCorner<3, 1>() = T_C1C2_mat.topRightCorner<3, 1>()
-            * std::max(
-                0.0,
-                double(
-                    T_C1C2_mat.topRightCorner<3, 1>().transpose()
-                        * T_C1C2.r()));
-      } else {
+            * std::max( 0.0, double(
+                    T_C1C2_mat.topRightCorner<3, 1>().transpose() * T_C1C2.r()));
+      }
+      else
+      {
         // rotation only assigned...
         T_C1C2_mat.topLeftCorner<3, 3>() = rotation_only_ransac
             .model_coefficients_;
@@ -897,7 +916,9 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
   }
 
   if (rel_pose_success || rotation_only_success)
+  {
     return totalInlierNumber;
+  }
   else
   {
     LOG(INFO) << "both rel_pose_success and rotation_only_success are false! HACK!";
@@ -909,34 +930,43 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
 }
 
 // (re)instantiates feature detectors and descriptor extractors. Used after settings changed or at startup.
-void Frontend::initialiseBriskFeatureDetectors() {
+void Frontend::initialiseBriskFeatureDetectors()
+{
   for (auto it = featureDetectorMutexes_.begin();
-      it != featureDetectorMutexes_.end(); ++it) {
+      it != featureDetectorMutexes_.end(); ++it)
+  {
     (*it)->lock();
   }
+
   featureDetectors_.clear();
   descriptorExtractors_.clear();
-  for (size_t i = 0; i < numCameras_; ++i) {
+
+  for (size_t i = 0; i < numCameras_; ++i)
+  {
     featureDetectors_.push_back(
         std::shared_ptr<cv::FeatureDetector>(
-#ifdef __ARM_NEON__
+
+//#ifdef __ARM_NEON__
             new cv::GridAdaptedFeatureDetector( 
             new cv::FastFeatureDetector(briskDetectionThreshold_),
-                briskDetectionMaximumKeypoints_, 7, 4 ))); // from config file, except the 7x4...
-#else
-            new brisk::ScaleSpaceFeatureDetector<brisk::HarrisScoreCalculator>(
-                briskDetectionThreshold_, briskDetectionOctaves_, 
-                briskDetectionAbsoluteThreshold_,
-                briskDetectionMaximumKeypoints_)));
-#endif
+                briskDetectionMaximumKeypoints_, 4, 4 ))); // from config file, except the 7x4...
+//#else
+//            new brisk::ScaleSpaceFeatureDetector<brisk::HarrisScoreCalculator>(
+//                briskDetectionThreshold_, briskDetectionOctaves_,
+//                briskDetectionAbsoluteThreshold_,
+//                briskDetectionMaximumKeypoints_)));
+//#endif
+
     descriptorExtractors_.push_back(
         std::shared_ptr<cv::DescriptorExtractor>(
             new brisk::BriskDescriptorExtractor(
                 briskDescriptionRotationInvariance_,
                 briskDescriptionScaleInvariance_)));
   }
+
   for (auto it = featureDetectorMutexes_.begin();
-      it != featureDetectorMutexes_.end(); ++it) {
+      it != featureDetectorMutexes_.end(); ++it)
+  {
     (*it)->unlock();
   }
 }

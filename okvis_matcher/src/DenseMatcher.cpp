@@ -50,7 +50,8 @@ DenseMatcher::DenseMatcher(unsigned char numMatcherThreads,
                            bool useDistanceRatioThreshold)
     : numMatcherThreads_(numMatcherThreads),
       numBest_(numBest),
-      useDistanceRatioThreshold_(useDistanceRatioThreshold) {
+      useDistanceRatioThreshold_(useDistanceRatioThreshold)
+{
   matcherThreadPool_.reset(new okvis::ThreadPool(numMatcherThreads_));
 }
 
@@ -69,11 +70,13 @@ void DenseMatcher::matchSlow(MatchingAlgorithm & matchingAlgorithm)
 void DenseMatcher::assignbest(int indexToAssignFromListA,
                               pairing_list_t& vPairsWithScore,
                               std::vector<std::vector<pairing_t> >& aiBestList,
-                              std::mutex* mutexes, int startidx) {
+                              std::mutex* mutexes, int startidx)
+{
   //the top matches for the current index
   const std::vector<pairing_t>& aiBest = aiBestList[indexToAssignFromListA];
   for (int index = startidx; index < numBest_ && aiBest[index].indexA != -1;
-      ++index) {
+      ++index)
+  {
     //fetch index to pair with myidx
     const int pairIndexFromListB = aiBest[index].indexA;
     // synchronize this
@@ -86,10 +89,13 @@ void DenseMatcher::assignbest(int indexToAssignFromListA,
       vPairsWithScore[pairIndexFromListB].distance = aiBest[index].distance;
       mutexes[pairIndexFromListB].unlock();
       return;
-    } else {
+    }
+    else
+    {
       //already paired, so check the score of that pairing
       if (aiBest[index].distance
-          < vPairsWithScore[pairIndexFromListB].distance) {
+          < vPairsWithScore[pairIndexFromListB].distance)
+      {
         // My distance is better!
         // save vals of old pairing
         const int oldPairIndexFromListA = vPairsWithScore[pairIndexFromListB]

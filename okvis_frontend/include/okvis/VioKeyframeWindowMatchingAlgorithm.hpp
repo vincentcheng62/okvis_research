@@ -129,7 +129,8 @@ class VioKeyframeWindowMatchingAlgorithm : public okvis::MatchingAlgorithm {
    * @return Distance between the two keypoint descriptors.
    * @remark Points that absolutely don't match will return float::max.
    */
-  virtual float distance(size_t indexA, size_t indexB) const {
+  virtual float distance(size_t indexA, size_t indexB) const
+  {
     OKVIS_ASSERT_LT_DBG(MatchingAlgorithm::Exception, indexA, sizeA(), "index A out of bounds");
     OKVIS_ASSERT_LT_DBG(MatchingAlgorithm::Exception, indexB, sizeB(), "index B out of bounds");
     const float dist = static_cast<float>(specificDescriptorDistance(
@@ -245,12 +246,13 @@ class VioKeyframeWindowMatchingAlgorithm : public okvis::MatchingAlgorithm {
   // copy from BriskDescriptor.hpp
   uint32_t specificDescriptorDistance(
       const unsigned char * descriptorA,
-      const unsigned char * descriptorB) const {
+      const unsigned char * descriptorB) const
+  {
     OKVIS_ASSERT_TRUE_DBG(
         Exception, descriptorA != NULL && descriptorB != NULL,
         "Trying to compare a descriptor with a null description vector");
 
-    return brisk::Hamming::PopcntofXORed(descriptorA, descriptorB, 3/*48 / 16*/);
+    return brisk::Hamming::PopcntofXORed(descriptorA, descriptorB, 3/*48 / 16*/); // 3: numberOf128BitWords
   }
 };
 

@@ -22,7 +22,11 @@ side view loop
 side_28sec_20m_slowinit
 ../config/config_me2_inv_mancalib.yaml /home/vincent/okvis/side_28sec_20m_slowinit
 
+ceiling_outside_office_50000frames
+../config/config_me2_inv_mancalib.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1507086304
 
+ceiling_outside_office_entirely_50000frames
+../config/config_me2_inv_mancalib.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1507088297
 
 
 

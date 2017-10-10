@@ -15,14 +15,15 @@
 #include <okvis/VioParametersReader.hpp>
 #include <okvis/ThreadedKFVio.hpp>
 #include <boost/filesystem.hpp>
+
 #include <QtSerialPort/QSerialPort>
 #include <QTextStream>
 #include <QCoreApplication>
 #include <QStringList>
-#include <sys/time.h>
+//#include <sys/time.h>
 #include "stdafx.h"
 #include <time.h>
-#include <unistd.h>
+//#include <unistd.h>
 #include <math.h>
 #include <vector>
 #include "FlyCapture2.h"
@@ -30,14 +31,31 @@
 #include <thread>
 #include <mutex>
 #include <iomanip>
+#include <ctime>
+#include <cstdlib>
+#include <experimental/filesystem>
+#include <chrono>
+#ifndef M_PI
+    #define M_PI 3.14159265358979323846
+#endif
 
-#define PLAY_DELAY_IN_MS (50) // 0 is stop
+#if defined(_WIN32) || defined(_WIN64)
+    #define USBPORTNAME QString("COM")
+#else
+    #define USBPORTNAME QString("ttyUSB")
+#endif
 
+#define PLAY_DELAY_IN_MS (100) // 0 is stop
+#define DEFAULT_CONFIG_FILE ("../config/config_me2_inv_mancalib.yaml")
+
+namespace fs = std::experimental::filesystem;
 using namespace FlyCapture2;
 using namespace std;
 using namespace cv;
 
-#define GRAVITY (9.80665)
+#define SECOND_TO_SLEEP_AT_START (5)
+
+#define GRAVITY (9.81007) // according to okvis (offical: 9.80665)
 #define _USE_MATH_DEFINES
 #define ACCELE_LSB_DIVIDER (1200.0/GRAVITY)
 #define ACCELE_MAX_DECIMAL (21600)
@@ -46,28 +64,106 @@ using namespace cv;
 
 #define CAM_IMAGE_WIDTH (640)
 #define CAM_IMAGE_HEIGHT (512)
+#define CAMERA_NUMBER_OF_BUFFER (20)
+
+// Camera hardware setting: NA: 4.0, focusing range: infinity
+#define ISCAMERA_SETTING_DEFAULT    (false)
+#define CAMERA_SHUTTER_TIME_IN_MS (4.0) // tune the shutter time to avoid motion blur
+#define CAMERA_SHUTTER_LOG_FOR_RUN_MULTIPLER    (1) // default 2.5 for looking at ceiling
+#define CAMERA_EXPOSURE_IN_EV (1.0) // orig: 0.939
+#define CAMERA_GAIN_IN_dB (35.0) // orig: 0.939
+#define CAMERA_GAIN_LOG_FOR_RUN_MULTIPLER    (0.25) // default 0.25 for looking at ceiling
 
 // [AA][acc_x][acc_y][acc_z][gyro_x][gyro_y][gyro_z][whether cam sync trigger][total count][55]
-#define IMU_FRAME_LENGTH (17)
+
 
 #define IsProgramDebug (false)
+#define MAX_TTY_TRY_INDEX       (10)
 
-#define LOG_FOR_CALIB   (0)
-#define LOG_FOR_RUN     (1)
-#define LOG_MODE        (LOG_FOR_CALIB)
+#define LOG_FOR_CALIB_CAMERA_IMU        (0)
+#define LOG_FOR_RUN                     (1)
+#define LOG_FOR_CALIB_IMU_INTRINSIC     (2)
+#define LOG_MODE                        (LOG_FOR_RUN)
 
-#define SERIAL_READ_TIMEOUT_TIME (5000) // in miliseconds
-#define IMU_FRAME_TO_CAPTURE (10000)
+#define SERIAL_READ_TIMEOUT_TIME (500) // in miliseconds
+#define CAMERA_GRAB_TIMEOUT (5000) // in miliseconds
+#define CAMERA_POWER_UP_RETRY (1000)
 
-#define RUN_MODE_OFFLINE    (0)
-#define RUN_MODE_ONLINE     (1)
-#define RUN_MODE            (RUN_MODE_OFFLINE)
+// The following 3 para need to be tuned so that imu data can be captured at ~500Hz in software level
+// It is becoz waitForReadyRead() takes 3.5~4ms randomly for each call
+#define BYTE_TO_READ_PER_SERIALPORT  (32)
+#define BYTE_TO_READ_PER_SERIALPORT2  (33)
 
+// every nth use port2, so to speed up a little bit
+// (30) for auto shutter in static
+// (26) for 2ms shutter in static
+// (35) for 2ms shutter in dynamic
+#define BYTE_TO_READ_RATIO  (35)
+
+#define IMU_FRAME_LENGTH (17)
+#define IMU_Hz             (500)
+#define IMU_TO_CAM_RATIO       (20)
+#define CAM_Hz              (IMU_Hz/IMU_TO_CAM_RATIO)
+
+//Keep it 10000 if want to achieve good repeatibility in okvis
+#define IMU_FRAME_TO_CAPTURE (50000) // 57000 for luyujie loop in fuyong
+
+
+#define SYNC_MARGIN (4000) // margin in ms, after a new camera frame arrive, wait SYNC_MARGIN ms and get the latest imu frame with sync=0x01
+#define FIRST_FRAME_MATCH_MARGIN    (SYNC_MARGIN*4)
+
+bool isFirstCamCapture=false;
+okvis::Time latestcamtime;
+
+struct imudata
+{
+    long index;
+    bool IsSync;
+    double gyro_x;
+    double gyro_y;
+    double gyro_z;
+    double acc_x;
+    double acc_y;
+    double acc_z;
+};
+
+bool BothStart=false;
+bool ManualStop=false;
+Image imagecopy;
+std::vector<imudata> gIMUframes;
+std::vector<TimeStamp> gImageframes;
+int awayfromlastsynccounter = -1000; // used in ReadIMUData(), but also helps to determine when to turn BothStart to true
+fstream fp;
+double total_length_of_travel=0;
 
 QT_USE_NAMESPACE
 
-fstream fp;
-double total_length_of_travel=0;
+static inline uint32_t __iter_div_u64_rem(uint64_t dividend, uint32_t divisor, uint64_t *remainder)
+{
+  uint32_t ret = 0;
+
+  while (dividend >= divisor) {
+    /* The following asm() prevents the compiler from
+       optimising this loop into a modulo operation.  */
+    //asm("" : "+rm"(dividend));
+
+    dividend -= divisor;
+    ret++;
+  }
+
+  *remainder = dividend;
+
+  return ret;
+}
+
+#define NSEC_PER_SEC  1000000000L
+static inline void timespec_add_ns(struct timespec *a, uint64_t ns)
+{
+  a->tv_sec += __iter_div_u64_rem(a->tv_nsec + ns, NSEC_PER_SEC, &ns);
+  a->tv_nsec = ns;
+}
+
+
 
 void PrintBuildInfo2()
 {
@@ -121,7 +217,19 @@ bool PollForTriggerReady2(Camera *pCam)
     return true;
 }
 
-int AddImage(Image image, cv::Mat img)
+void PrintFormat7Capabilities(Format7Info fmt7Info)
+{
+    cout << "*** Format7 INFORMATION ***" << endl;
+    cout << "Max image pixels: (" << fmt7Info.maxWidth << ", "
+         << fmt7Info.maxHeight << ")" << endl;
+    cout << "Image Unit size: (" << fmt7Info.imageHStepSize << ", "
+         << fmt7Info.imageVStepSize << ")" << endl;
+    cout << "Offset Unit size: (" << fmt7Info.offsetHStepSize << ", "
+         << fmt7Info.offsetVStepSize << ")" << endl;
+    cout << "Pixel format bitfield: 0x" << fmt7Info.pixelFormatBitField << endl <<endl;
+}
+
+int ConvertToOpenCVImage(Image image, cv::Mat img)
 {
     Error error;
 
@@ -139,7 +247,386 @@ int AddImage(Image image, cv::Mat img)
 
     //
     img = cv::Mat(image.GetRows(), image.GetCols(), CV_8UC3, image.GetData());
+    //memcpy( img.data, image.GetData(), image.GetRows()*image.GetCols());
     return 0;
+}
+
+void CamRetrieveBuffer(Camera &cam, okvis::ThreadedKFVio &okvis_estimator)
+{
+    Error error;
+    Image image;
+    int i=0;
+    timespec camtime, tend;
+
+    while(!ManualStop)
+    {
+        error = cam.RetrieveBuffer(&image);
+        //clock_gettime(CLOCK_REALTIME, &tend);
+        //cout << "End timestamp= " << (long long)tend.tv_sec << std::setw(9) <<
+                //std::setfill('0') << (long)tend.tv_nsec<< endl;
+        //double retrievetime = double((long long)tend.tv_sec - (long long)tstart.tv_sec) + double((long)tend.tv_nsec-(long)tstart.tv_nsec)*1e-9;
+        //cout << "RetrieveBuffertime= " << retrievetime << endl;
+        if (error != PGRERROR_OK)
+        {
+            cout << "Error in RetrieveBuffer, skip this image frame" << endl;
+            cout << error.GetDescription() << endl;
+            cout << error.CollectSupportInformation() << endl;
+            cout << error.GetCause().GetDescription() << endl;
+            cout << error.GetType() << endl;
+            error.PrintErrorTrace();
+            //PrintError2(error);
+            //std::cin.get();
+            //return -1;
+        }
+        else
+        {
+            //clock_gettime(CLOCK_REALTIME, &tend);
+
+            //cout << "img Timestamp in micsecond: " << tend.tv_nsec << endl;
+            //cout << "img Timestamp in API: " << image.GetTimeStamp().microSeconds*1000L << endl;
+
+            //cout << "success" << endl;
+            if(BothStart) gImageframes.push_back(image.GetTimeStamp());
+
+
+
+            //imagecopy.DeepCopy((&image));
+            if(BothStart)
+            {
+                //std::thread (SaveImage, imagecopy, dest).detach();
+                //std::thread (AddImage, imagecopy, std::ref(img)).detach();
+                //ConvertToOpenCVImage(image, &img);
+
+                // Create a converted image
+                Image convertedImage;
+                image.Convert(PIXEL_FORMAT_MONO8, &convertedImage);
+
+                //cv::Mat img = cv::Mat(image.GetRows(), image.GetCols(), CV_8UC1, convertedImage.GetData());
+                cv::Mat img = cv::Mat(image.GetRows(), image.GetCols(), CV_8UC1);
+                memcpy( img.data, convertedImage.GetData(), image.GetRows()*image.GetCols());
+                //cout << "img.type(): " << img.type() << endl;
+                //cv::Mat convertedimg;
+                //img.convertTo(convertedimg, CV_16UC1);
+                //cv::imwrite( "zzz.jpg", img );
+
+                latestcamtime = okvis::Time(image.GetTimeStamp().seconds, image.GetTimeStamp().microSeconds*1e3);
+                //timespec_get(&camtime, TIME_UTC);
+                //latestcamtime = okvis::Time(camtime.tv_sec, camtime.tv_nsec);
+                okvis_estimator.addImage(latestcamtime, 0, img);
+
+
+                if(!isFirstCamCapture)
+                {
+                    isFirstCamCapture=true;
+                    cout << "First image is captured!" << endl;
+    //                timespec t;
+    //                timespec_get(&first_image_timestamp, TIME_UTC);
+                }
+
+                cout << "Finish adding the image to okvis.estimator with timestamp: " << latestcamtime << endl;
+            }
+            //if(BothStart) SaveImage(image, dest);
+
+        }
+        if(BothStart && i%5==0)
+        {
+            if (error != PGRERROR_OK)
+            {
+                cout << "i=" << i << ", An image frame is failed to capture!" << endl;
+            }
+            else
+            {
+                cout << "i=" << i << ", An image frame is captured!" << endl;
+            }
+        }
+
+        if(BothStart) i++;
+    }
+    cout << "Finish CamRetrieveBuffer() thread" << endl;
+
+    //usleep(1e6);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    ManualStop=true;
+}
+
+
+
+
+
+void ReadIMUdata(QSerialPort &serialPort, okvis::ThreadedKFVio &okvis_estimator)
+{
+    unsigned long long imu_period_in_nsec = 1000000000/IMU_Hz;
+    unsigned long cam_period_in_nsec = 1000000000/CAM_Hz;
+
+    int currentoffset=-1; // -1 means not yet found 0xAA, >=0 means the position away from 0xAA
+    std::vector<double> imuvalue;
+
+    long i=0, k=0; // i: valid imu frame, k: complete frame received
+
+    unsigned int b_prev=0;
+    int sum;
+    double value;
+    timespec imutime, tstart, tend;
+    okvis::Time lastcamtime;
+    bool IsWaitCamFrameCome=false;
+
+    //serialPort.readAll(); // clear the past data in the buffer
+//    if(serialPort.clear(QSerialPort::Input)) // clear the past data in the buffer
+//    {
+//        cout << "serialPort.clear() fails!" << endl;
+//        std::cin.get();
+//    }
+
+    while (!ManualStop)
+    {
+        serialPort.waitForReadyRead(SERIAL_READ_TIMEOUT_TIME);
+//        if(serialPort.bytesAvailable()==0)
+//        {
+//            usleep(1e3);
+//            continue;
+//        }
+        //clock_gettime(CLOCK_REALTIME, &tend);
+        //double retrievetime = double((long long)tend.tv_sec - (long long)tstart.tv_sec) + double((long)tend.tv_nsec-(long)tstart.tv_nsec)*1e-9;
+        //cout << "serialPort.waitForReadyRead time in ms= " << retrievetime*1e3 << endl;
+
+
+        QByteArray tmp;
+        tmp = serialPort.readAll(); // usually take less than 0.01 ms
+//        if(i%BYTE_TO_READ_RATIO==0)
+//        {
+//            tmp = serialPort.read(BYTE_TO_READ_PER_SERIALPORT2);
+//        }
+//        else
+//        {
+//            tmp = serialPort.read(BYTE_TO_READ_PER_SERIALPORT);
+//        }
+
+//        QByteArray tmp = serialPort.read(IMU_FRAME_LENGTH);
+//        if(tmp.length()==0)
+//        {
+//            cout << "No new data is fetched!" << endl;
+//            usleep(1e3);
+//            continue;
+//        }
+
+        //if(IsProgramDebug) readData.append(tmp);
+        //cout << "tmp.data(): " << tmp.data() << endl;
+
+        //standardOutput << QObject::tr("serialPort.bytesAvailable()=%1").arg(serialPort.bytesAvailable()) << endl;
+        const char* c=tmp.data();
+
+        //standardOutput << QObject::tr("tmp.size()=%1").arg(tmp.size()) << endl;
+        //if(tmp.size()==0) cout << "No data is read, the frame is skip" << endl;
+        //offsetofframeintmp=0;
+        for (int j=0; j<tmp.length() && i<IMU_FRAME_TO_CAPTURE; j++)
+        {
+//            if(k_when_first_capture<0 && isFirstCamCapture)
+//            {
+//                k_when_first_capture=k;
+//            }
+            //Detect "0xAA", get a new frame of imu data
+            unsigned int b1=*c;
+            auto data_in_hex = b1 & 0xff;
+            //if(IsProgramDebug) standardOutput << QObject::tr("data_in_hex=%1, j=%2, b1=%3").arg(data_in_hex).arg(j).arg(b1) << endl;
+            if(currentoffset<0 && data_in_hex == 0xAA)
+            {
+//                if(offsetofframeintmp==0)
+//                {
+//                    clock_gettime(CLOCK_REALTIME, &imutime);
+//                }
+//                else
+//                {
+//                    timespec_add_ns(&imutime, 2000000); // add 2ms to trick
+//                }
+//                offsetofframeintmp++;
+                currentoffset=0;
+            }
+            else
+            {
+                if(currentoffset == 16 && data_in_hex == 0x55) currentoffset=-1;
+                else
+                {
+                    switch(currentoffset)
+                    {
+                        //waiting for the next byte to complete
+                        case 1: case 3: case 5: case 7: case 9: case 11: case 14:
+                            b_prev = data_in_hex;
+                            break;
+
+                        case 2: case 4: case 6:// accelerometer
+                            sum = (b_prev<<8)+data_in_hex;
+                            value = (sum>ACCELE_MAX_DECIMAL?sum-65536:sum)/ACCELE_LSB_DIVIDER;
+                            //if(IsProgramDebug) standardOutput << QObject::tr("===Acc, sum=%1, value=%2").arg(sum).arg(value) << endl;
+                            imuvalue.push_back(value);
+                            break;
+
+                        case 8: case 10: case 12: // gyroscope
+                            sum = (b_prev<<8)+data_in_hex;
+                            value = (sum>GYRO_MAX_DECIMAL?sum-65536:sum)/GYRO_LSB_DIVIDER;
+                            //if(IsProgramDebug) standardOutput << QObject::tr("===Gyro, sum=%1, value=%2").arg(sum).arg(value) << endl;
+                            imuvalue.push_back(value);
+                            //cout << sum << endl;
+                            break;
+
+                        case 13: // whether a syn signal is sent to camera
+                            //clock_gettime(CLOCK_REALTIME, &imutime);
+                            timespec_get(&imutime, TIME_UTC);
+//                               if(data_in_hex == 0x01)
+//                               {
+//                                   hasSync=1;
+//                                   if(imuSyncIndex<0 && isFirstCamCapture)
+//                                   {
+//                                       imuSyncIndex = k;
+//                                   }
+//                               }
+//                               else hasSync=0;
+//                            if(data_in_hex == 0x01 && tmp.size() == 32 && LOG_MODE!=LOG_FOR_CALIB_IMU_INTRINSIC)
+//                            {
+//                                // Grab image
+//                                clock_gettime(CLOCK_REALTIME, &tstart);
+//                                error = cam.RetrieveBuffer(&image);
+//                                clock_gettime(CLOCK_REALTIME, &tend);
+//                                double retrievetime = double((long long)tend.tv_sec - (long long)tstart.tv_sec) + double((long)tend.tv_nsec-(long)tstart.tv_nsec)*1e-9;
+////                                if(retrievetime > (double)cam_period_in_nsec*0.5*1e-9)
+////                                {
+////                                    cout << "Retrieve time > half camera period, matching fail!" << endl;
+////                                    std::cin.get();
+////                                    return 0;
+////                                }
+
+//                                //cout << "RetrieveBuffertime= " << retrievetime << endl;
+//                                if (error != PGRERROR_OK)
+//                                {
+//                                    cout << "Error in RetrieveBuffer, skip this image frame" << endl;
+//                                    //PrintError2(error);
+//                                    //std::cin.get();
+//                                    //return -1;
+//                                }
+//                                else
+//                                {
+//                                    std::thread (SaveImage, image, imagedestination).detach();
+//                                    imutime = (image.GetTimeStamp().seconds-retrievetime)*1000000000L+image.GetTimeStamp().microSeconds*1000L;
+//                                    //cout << "ImageTimestamp= " << imutime.seconds << std::setw(9) <<
+//                                                 //std::setfill('0') << imutime.microSeconds*1000L << endl;
+//                                    awayfromlastsynccounter=0;
+//                                }
+//                            }
+//                            else awayfromlastsynccounter++;
+
+                              if(data_in_hex == 0x01) awayfromlastsynccounter=0;
+                              else awayfromlastsynccounter++;
+
+
+                            break;
+
+                        case 15: // a counter from 0 to 65535
+                            sum = (b_prev<<8)+data_in_hex;
+                            //if(IsProgramDebug) standardOutput << QObject::tr("Counter=%1").arg(sum) << endl;
+                            break;
+
+                        default:
+                            //if(IsProgramDebug) standardOutput << QObject::tr("Parsing imu data error, j=%1, currentoffset=%2, data_in_hex=%3, re-search 0xAA !!").arg(j).arg(currentoffset).arg(data_in_hex) << endl;
+                            currentoffset=-1;
+                            awayfromlastsynccounter = -1000;
+                            imuvalue.clear(); // remove some prev captured frames where start with 0xAA but not end in 0x55
+                            break;
+                    }
+                }
+            }
+            c++;
+            if(currentoffset>=0) currentoffset++;
+
+            //Flush a new imu frame if imuvalue has more than 6 entry
+            if(imuvalue.size()>=6)
+            {
+                //if(imuSyncIndex>0) // if the first image is captured
+                //{
+                    //long long t = first_image_timestamp + (k-imuSyncIndex)*imu_period_in_nsec;
+//                        long long t = imutime + (awayfromlastsynccounter)*imu_period_in_nsec;
+//                        fp << t <<  ",";
+
+//                        //fp << (long long)imutime.tv_sec << std::setw(9) <<
+//                        //      std::setfill('0') << (long)imutime.tv_nsec<< "," ;
+//                        //fp << awayfromlastsynccounter << ",";
+//                        fp << imuvalue[3] << ",";
+//                        fp << imuvalue[4] << ",";
+//                        fp << imuvalue[5] << ",";
+//                        fp << imuvalue[0] << ",";
+//                        fp << imuvalue[1] << ",";
+//                        fp << imuvalue[2] << endl;
+                imudata tmp;
+                tmp.index=i;
+                tmp.IsSync = (awayfromlastsynccounter==0);
+                tmp.gyro_x = imuvalue[3];
+                tmp.gyro_y = imuvalue[4];
+                tmp.gyro_z = imuvalue[5];
+                tmp.acc_x = imuvalue[0];
+                tmp.acc_y = imuvalue[1];
+                tmp.acc_z = imuvalue[2];
+
+                //clock_gettime(CLOCK_REALTIME, &tstart);
+                //cout << "imu frame timestamp: " << tstart.tv_nsec << endl;
+
+                if(BothStart)
+                {
+                   gIMUframes.push_back(tmp);
+                   i++;
+                   if(i%100==0) cout << "i=" << i << ", An imu frame is captured!" << endl;
+
+                   Eigen::Vector3d gyr;
+                   for (int j = 0; j < 3; ++j) {
+                     gyr[j] = imuvalue[3+j];
+                   }
+
+                   Eigen::Vector3d acc;
+                   for (int j = 0; j < 3; ++j) {
+                     acc[j] = imuvalue[j];
+                   }
+
+                   okvis::Time t_imu;
+                   if(isFirstCamCapture)
+                   {
+                       if(lastcamtime!=latestcamtime) IsWaitCamFrameCome=false;
+                       //If cam frame still not capture but the corresponding imu frame with sync is arrived
+                       if(IsWaitCamFrameCome||(lastcamtime==latestcamtime && awayfromlastsynccounter==0))
+                       {
+                           // *0.3, avoid exceeding next correct sync timestamp
+                           t_imu = latestcamtime + okvis::Duration(0, 20*imu_period_in_nsec + awayfromlastsynccounter*imu_period_in_nsec*0.3);
+                           IsWaitCamFrameCome=true;
+                       }
+                       else
+                       {
+                           t_imu = latestcamtime + okvis::Duration(0, (awayfromlastsynccounter)*imu_period_in_nsec);
+                       }
+                       lastcamtime = latestcamtime;
+                   }
+                   else
+                   {
+                       t_imu = okvis::Time(imutime.tv_sec, imutime.tv_nsec);
+                   }
+
+
+                   // add the IMU measurement for (blocking) processing if imu timestamp + 1 sec > start
+                   // deltaT is user input argument [skip-first-second], init is 0
+                   //if (t_imu - start + okvis::Duration(1.0) > deltaT) {
+                     okvis_estimator.addImuMeasurement(t_imu, acc, gyr);
+                     cout << "Finish adding the imu data to okvis.estimator with timestamp: " << t_imu << endl;
+                   //}
+                }
+                //}
+
+
+                imuvalue.erase (imuvalue.begin(),imuvalue.begin()+6);
+                k++;
+            }
+        }
+
+    }
+    cout << "Finish ReadIMUdata() thread" << endl;
+
+    //usleep(1e6);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    ManualStop=true;
 }
 
 class PoseViewer
@@ -340,7 +827,7 @@ int main3(int argc, char **argv)
 //Do the linear optimization between OKVIS output and AGV odometry
 //1st arg: okvis output
 //2nd arg: AGV odometry
-int main(int argc, char **argv)
+int main5(int argc, char **argv)
 {
     if (argc < 3)
     {
@@ -475,7 +962,8 @@ int main(int argc, char **argv)
 
     //Transform okvis pt array using Homography_mat and save down the result
     timespec starttime;
-    clock_gettime(CLOCK_REALTIME, &starttime);
+    //clock_gettime(CLOCK_REALTIME, &starttime);
+    timespec_get(&starttime, TIME_UTC);
     std::stringstream filename;
     filename << starttime.tv_sec << "alignresult.txt";
     fp.open(filename.str(), ios::out);
@@ -514,19 +1002,19 @@ int main(int argc, char **argv)
 
 
 // this is just a workbench. most of the stuff here will go into the Frontend class.
-int main4(int argc, char **argv)
+int main(int argc, char **argv)
 {
   google::InitGoogleLogging(argv[0]);
   FLAGS_stderrthreshold = 0;  // INFO: 0, WARNING: 1, ERROR: 2, FATAL: 3
   FLAGS_colorlogtostderr = 1;
 
-  if ((RUN_MODE == RUN_MODE_OFFLINE && argc < 3) ||
-       (RUN_MODE == RUN_MODE_ONLINE && argc < 2) ) {
-      // COMPACT_GOOGLE_LOG_ERROR.stream()
-    LOG(ERROR)<<
-    "Usage: ./" << argv[0] << " configuration-yaml-file dataset-folder [skip-first-seconds]";
-    return -1;
-  }
+//  if (argc < 2)
+//  {
+//      // COMPACT_GOOGLE_LOG_ERROR.stream()
+//    LOG(ERROR)<<
+//    "Usage: ./" << argv[0] << " configuration-yaml-file [dataset-folder] [skip-first-seconds]";
+//    return -1;
+//  }
 
   okvis::Duration deltaT(0.0);
   if (argc == 4) {
@@ -534,7 +1022,15 @@ int main4(int argc, char **argv)
   }
 
   // read configuration file
-  std::string configFilename(argv[1]);
+  std::string configFilename;
+  if(argc<2)
+  {
+      configFilename = std::string(DEFAULT_CONFIG_FILE);
+  }
+  else
+  {
+      configFilename = std::string(argv[1]);
+  }
 
   okvis::VioParametersReader vio_parameters_reader(configFilename);
   okvis::VioParameters parameters;
@@ -550,7 +1046,8 @@ int main4(int argc, char **argv)
 
   //Also output the position, angle and velocity to result.txt
   timespec starttime;
-  clock_gettime(CLOCK_REALTIME, &starttime);
+  //clock_gettime(CLOCK_REALTIME, &starttime);
+  timespec_get(&starttime, TIME_UTC);
   std::stringstream filename;
   filename << starttime.tv_sec << "result.txt";
   fp.open(filename.str(), ios::out);
@@ -573,8 +1070,8 @@ int main4(int argc, char **argv)
   //should return immediately (blocking=false), or only when the processing is complete.
   okvis_estimator.setBlocking(true);
 
-  //Setup folder path
-  if (RUN_MODE == RUN_MODE_OFFLINE)
+  //run offline by providing the dataset
+  if (argc>=3)
   {
       // the folder path
       std::string path(argv[2]);
@@ -675,6 +1172,7 @@ int main4(int argc, char **argv)
           cv::Mat filtered = cv::imread(
               path + "/cam" + std::to_string(i) + "/data/" + *cam_iterators.at(i),
               cv::IMREAD_GRAYSCALE);
+          //cout << "filtered.type(): " << filtered.type() << endl;
 
           //The image name contains the second and nanoseconds of the capture time + ".png"
           std::string nanoseconds = cam_iterators.at(i)->substr(
@@ -751,27 +1249,18 @@ int main4(int argc, char **argv)
 
       }
   }
+
+  // RUN ONLINE
   else
   {
+      std::thread t1,t2;
       QTextStream standardOutput(stdout);
-      QSerialPort serialPort;
-      QString serialPortName = "ttyUSB0";
-      serialPort.setPortName(serialPortName);
-
-      int serialPortBaudRate = QSerialPort::Baud115200;
-      serialPort.setBaudRate(serialPortBaudRate);
-
-      if (!serialPort.open(QIODevice::ReadOnly)) {
-          standardOutput << QObject::tr("Failed to open port %1, error: %2").arg(serialPortName).arg(serialPort.error()) << endl;
-          std::cin.get();
-          return 1;
-      }
-
-      standardOutput << QObject::tr("Opened the serial port %1, at baudrate: %2").arg(serialPortName).arg(serialPortBaudRate) << endl;
-
+      Camera cam;
+      Error error;
+      TriggerMode triggerMode;
       //Setup the pointgrey camera
       PrintBuildInfo2();
-      Error error;
+
       BusManager busMgr;
       unsigned int numCameras;
       error = busMgr.GetNumOfCameras(&numCameras);
@@ -800,9 +1289,10 @@ int main4(int argc, char **argv)
           return -1;
       }
 
-      Camera cam;
+
 
       // Connect to a camera
+      cout << "Start connecting to the camera...." << endl;
       error = cam.Connect(&guid);
       if (error != PGRERROR_OK)
       {
@@ -814,6 +1304,7 @@ int main4(int argc, char **argv)
       // Power on the camera
       const unsigned int k_cameraPower = 0x610;
       const unsigned int k_powerVal = 0x80000000;
+      cout << "Start powering on the camera...." << endl;
       error = cam.WriteRegister(k_cameraPower, k_powerVal);
       if (error != PGRERROR_OK)
       {
@@ -822,17 +1313,17 @@ int main4(int argc, char **argv)
           return -1;
       }
 
-      const unsigned int millisecondsToSleep = 100;
       unsigned int regVal = 0;
-      unsigned int retries = 10;
+      unsigned int retries = CAMERA_POWER_UP_RETRY;
 
       // Wait for camera to complete power-up
       do
       {
-          struct timespec nsDelay;
-          nsDelay.tv_sec = 0;
-          nsDelay.tv_nsec = (long)millisecondsToSleep * 1000000L;
-          nanosleep(&nsDelay, NULL);
+//            struct timespec nsDelay;
+//            nsDelay.tv_sec = 0;
+//            nsDelay.tv_nsec = (long)millisecondsToSleep * 1000000L;
+//            nanosleep(&nsDelay, NULL);
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
           error = cam.ReadRegister(k_cameraPower, &regVal);
           if (error == PGRERROR_TIMEOUT)
@@ -849,6 +1340,11 @@ int main4(int argc, char **argv)
 
           retries--;
       } while ((regVal & k_powerVal) == 0 && retries > 0);
+
+      if(retries<=0)
+      {
+          cout << "Used up all retries quota!! Continue" << endl;
+      }
 
       // Check for timeout errors after retrying
       if (error == PGRERROR_TIMEOUT)
@@ -870,11 +1366,41 @@ int main4(int argc, char **argv)
 
       PrintCameraInfo2(&camInfo);
 
+      //char new_resl[512] = "640x512";
+      //strcpy(camInfo.sensorResolution, new_resl);
+
+      //error = cam.SetVideoModeAndFrameRate(VIDEOMODE_640x480Y8, FRAMERATE_15);
+
+      const Mode k_fmt7Mode = MODE_0;
+      const PixelFormat k_fmt7PixFmt = PIXEL_FORMAT_MONO8;
+
+      // Query for available Format 7 modes
+      Format7Info fmt7Info;
+      bool supported;
+      fmt7Info.mode = k_fmt7Mode;
+      error = cam.GetFormat7Info(&fmt7Info, &supported);
+      if (error != PGRERROR_OK)
+      {
+          PrintError2(error);
+          std::cin.get();
+          return -1;
+      }
+
+      PrintFormat7Capabilities(fmt7Info);
+
+      if ((k_fmt7PixFmt & fmt7Info.pixelFormatBitField) == 0)
+      {
+          // Pixel format not supported!
+          cout << "Pixel format is not supported" << endl;
+          std::cin.get();
+          return -1;
+      }
+
       auto imageSettings = new Format7ImageSettings();
-      imageSettings->mode = MODE_1;
+      imageSettings->mode = k_fmt7Mode; // MODE_1 use 2x2 binning of sub-sampled to achieve faster frame rate
       imageSettings->width = CAM_IMAGE_WIDTH;
       imageSettings->height = CAM_IMAGE_HEIGHT;
-      imageSettings->pixelFormat = PIXEL_FORMAT_MONO8;
+      imageSettings->pixelFormat = k_fmt7PixFmt;
 
       bool settingsValid = false;
       Format7PacketInfo packetInfo;
@@ -885,6 +1411,8 @@ int main4(int argc, char **argv)
           std::cin.get();
           return -1;
       }
+
+      cout << "Setting Format7 config of the camera...." << endl;
       error = cam.SetFormat7Configuration(imageSettings, packetInfo.recommendedBytesPerPacket);
       if (error != PGRERROR_OK)
       {
@@ -893,8 +1421,100 @@ int main4(int argc, char **argv)
           return -1;
       }
 
+      // Set the shutter property of the camera
+      Property prop;
+      prop.type = SHUTTER;
+      error = cam.GetProperty(&prop);
+      if (error != PGRERROR_OK)
+      {
+          PrintError2(error);
+          std::cin.get();
+          return -1;
+      }
+
+      cout << "default Shutter time is " << fixed << setprecision(2) << prop.absValue
+           << "ms" << endl;
+
+      prop.autoManualMode = false;
+      prop.absControl = true;
+
+      const float k_shutterVal = CAMERA_SHUTTER_TIME_IN_MS * (LOG_MODE==LOG_FOR_RUN?CAMERA_SHUTTER_LOG_FOR_RUN_MULTIPLER:1.0);
+      prop.absValue = k_shutterVal;
+
+      error = cam.SetProperty(&prop);
+      if (error != PGRERROR_OK)
+      {
+          PrintError2(error);
+          std::cin.get();
+          return -1;
+      }
+
+      cout << "Shutter time set to " << fixed << setprecision(2) << k_shutterVal
+           << "ms" << endl;
+
+      // Set the exposure property of the camera
+      Property prop2;
+      prop2.type = AUTO_EXPOSURE;
+      error = cam.GetProperty(&prop2);
+      if (error != PGRERROR_OK)
+      {
+          PrintError2(error);
+          std::cin.get();
+          return -1;
+      }
+
+      cout << "default AUTO_EXPOSURE is " << fixed << setprecision(2) << prop2.absValue
+           << "EV" << endl;
+
+      prop2.autoManualMode = ISCAMERA_SETTING_DEFAULT;
+      prop2.absControl = true;
+
+      const float k_exposureVal = CAMERA_EXPOSURE_IN_EV;
+      prop2.absValue = k_exposureVal;
+
+      error = cam.SetProperty(&prop2);
+      if (error != PGRERROR_OK)
+      {
+          PrintError2(error);
+          std::cin.get();
+          return -1;
+      }
+
+      cout << "Exposure is set to " << fixed << setprecision(2) << k_exposureVal
+           << "EV" << endl;
+
+      // Set the gain property of the camera
+      Property prop3;
+      prop3.type = GAIN;
+      error = cam.GetProperty(&prop3);
+      if (error != PGRERROR_OK)
+      {
+          PrintError2(error);
+          std::cin.get();
+          return -1;
+      }
+
+      cout << "default GAIN is " << fixed << setprecision(2) << prop3.absValue
+           << "dB" << endl;
+
+      prop3.autoManualMode = ISCAMERA_SETTING_DEFAULT;
+      prop3.absControl = true;
+
+      const float k_GainVal = CAMERA_GAIN_IN_dB* (LOG_MODE==LOG_FOR_RUN?CAMERA_GAIN_LOG_FOR_RUN_MULTIPLER:1.0);
+      prop3.absValue = k_GainVal;
+
+      error = cam.SetProperty(&prop3);
+      if (error != PGRERROR_OK)
+      {
+          PrintError2(error);
+          std::cin.get();
+          return -1;
+      }
+
+      cout << "Gain is set to " << fixed << setprecision(2) << k_GainVal
+           << "dB" << endl;
+
       // Get current trigger settings
-      TriggerMode triggerMode;
       error = cam.GetTriggerMode(&triggerMode);
       if (error != PGRERROR_OK)
       {
@@ -911,6 +1531,7 @@ int main4(int argc, char **argv)
       // Triggering the camera externally using source 0.
       triggerMode.source = 0;
 
+      cout << "Setting trigger mode of the camera...." << endl;
       error = cam.SetTriggerMode(&triggerMode);
       if (error != PGRERROR_OK)
       {
@@ -940,9 +1561,11 @@ int main4(int argc, char **argv)
       }
 
       // Set the grab timeout to 5 seconds
-      config.grabTimeout = 5000;
+      config.grabTimeout = CAMERA_GRAB_TIMEOUT;
+      config.numBuffers = CAMERA_NUMBER_OF_BUFFER;
 
       // Set the camera configuration
+      cout << "Setting config of the camera...." << endl;
       error = cam.SetConfiguration(&config);
       if (error != PGRERROR_OK)
       {
@@ -952,6 +1575,7 @@ int main4(int argc, char **argv)
       }
 
       // Camera is ready, start capturing images
+      cout << "Camera start capturing...." << endl;
       error = cam.StartCapture();
       if (error != PGRERROR_OK)
       {
@@ -964,140 +1588,215 @@ int main4(int argc, char **argv)
            << triggerMode.source << endl;
 
       Image image;
-      timespec imutime;
+      long long imutime;
+      //timespec imutime;
+      //TimeStamp imutime;
       int currentoffset=-1; // -1 means not yet found 0xAA, >=0 means the position away from 0xAA
       std::vector<double> imuvalue;
 
-      int i=0;
-      QByteArray readData = serialPort.readAll();
-      clock_gettime(CLOCK_REALTIME, &imutime);
+      int i=0, k=0; // i: valid imu frame, k: complete frame received
 
-      while (serialPort.waitForReadyRead(SERIAL_READ_TIMEOUT_TIME))
+      unsigned int b_prev=0;
+      int sum;
+      double value;
+      int offsetofframeintmp=0;
+      int hasSync=0;
+      int imuSyncIndex=-1;
+      int k_when_first_capture=-1;
+      int last_i_index=0;
+      bool IsMatched;
+      bool IsFirstMatchedFinished=false;
+      long totalwrongmatch=0;
+
+
+      //waitForReadyRead(): Blocks until new data is available for reading and the readyRead()
+      //signal has been emitted, or until msecs milliseconds have passed. If msecs is -1,
+      //this function will not time out.
+
+      //Returns true if new data is available for reading; otherwise returns false
+      //(if the operation timed out or if an error occurred).
+      //clock_gettime(CLOCK_REALTIME, &imutime);
+
+      timespec imucalib_starttime, tstart, tend, tmp;
+      timespec_get(&imucalib_starttime, TIME_UTC);
+
+      cout << "Now is time= " << (long long)imucalib_starttime.tv_sec << std::setw(9) <<
+              std::setfill('0') << (long)imucalib_starttime.tv_nsec<< endl ;
+      cout << "All data will be saved in directory /" << (long long)starttime.tv_sec << endl;
+      //cout << "Main loop Start!! " << endl;
+
+      int ttyUSBtryindex=0;
+      clock_t end, begin = clock();
+
+      QSerialPort serialPort;
+      QString serialPortName = USBPORTNAME+QString::number(ttyUSBtryindex);
+      serialPort.setPortName(serialPortName);
+
+      int serialPortBaudRate = QSerialPort::Baud115200;
+      serialPort.setBaudRate(serialPortBaudRate);
+
+      if (!serialPort.open(QIODevice::ReadOnly)) {
+          standardOutput << QObject::tr("Failed to open port %1, error: %2, please check if the previous window is closed").arg(serialPortName).arg(serialPort.error()) << endl;
+          cout << "Press any key to try other port" << endl;
+          std::cin.get();
+
+          ttyUSBtryindex++;
+          while(ttyUSBtryindex<MAX_TTY_TRY_INDEX)
+          {
+              serialPortName = USBPORTNAME+QString::number(ttyUSBtryindex);
+              serialPort.setPortName(serialPortName);
+              if(!serialPort.open(QIODevice::ReadOnly))
+              {
+                  standardOutput << QObject::tr("Failed to open port %1.").arg(serialPortName) << endl;
+              }
+              else break;
+
+              ttyUSBtryindex++;
+          }
+          if(ttyUSBtryindex==MAX_TTY_TRY_INDEX)
+          {
+              cout << "All port fails!" << endl;
+              std::cin.get();
+              return 1;
+          }
+      }
+
+      standardOutput << QObject::tr("Opened the serial port %1, at baudrate: %2").arg(serialPortName).arg(serialPortBaudRate) << endl;
+      t2 = std::thread(ReadIMUdata, std::ref(serialPort), std::ref(okvis_estimator));
+      t1 = std::thread(CamRetrieveBuffer, std::ref(cam), std::ref(okvis_estimator));
+
+      cout << "Sleep " << SECOND_TO_SLEEP_AT_START << " seconds to let imu and camera read rate stable..." << endl << endl;
+      //usleep(SECOND_TO_SLEEP_AT_START*1e6);
+      std::this_thread::sleep_for(std::chrono::seconds(SECOND_TO_SLEEP_AT_START));
+
+      char ch=0;
+
+      //get start at the middle of 2 sync signals
+      while(awayfromlastsynccounter!=IMU_TO_CAM_RATIO/2)
+      {
+          //usleep(1e2);
+          std::this_thread::sleep_for(std::chrono::microseconds(100));
+          //cout << "Try to get start at the middle of 2 sync signals..." << endl;
+      }
+      timespec_get(&tmp, TIME_UTC);
+      BothStart=true;
+      cout << "BothStart=true" << endl;
+      cout << "Now timestamp= " << tmp.tv_nsec<< endl;
+
+      //Do matching on the global vector data
+      std::vector<long> image_to_imu_index;
+
+      long imagelistcurrentsize=0;
+      while(!ManualStop)
       {
           okvis_estimator.display(); // show all OKVIS's camera
           poseViewer.display();
 
-          unsigned int b_prev=0;
-
-          int sum;
-          double value;
-          //QByteArray tmp = serialPort.readAll();
-          QByteArray tmp = serialPort.read(IMU_FRAME_LENGTH);
-
-          if(IsProgramDebug) readData.append(tmp);
-          if(IsProgramDebug) standardOutput << tmp.toHex() << endl;
-
-
-          const char* c=tmp.data();
-
-          if(IsProgramDebug) standardOutput << QObject::tr("tmp.length()=%1").arg(tmp.length()) << endl;
-          for (int j=0; j<tmp.length(); j++)
+          if(gImageframes.size()>imagelistcurrentsize) // if new image frame arrive
           {
-              //Detect "0xAA", get a new frame of imu data
-              unsigned int b1=*c;
-              auto data_in_hex = b1 & 0xff;
-              if(IsProgramDebug) standardOutput << QObject::tr("data_in_hex=%1, j=%2, b1=%3").arg(data_in_hex).arg(j).arg(b1) << endl;
-              if(currentoffset<0 && data_in_hex == 0xAA)
+              //cout << "Img timestamp in microsecond: " << gImageframes.back().microSeconds << endl;
+              //Check if it is a jump in the index
+              if(gImageframes.size()>imagelistcurrentsize+1)
               {
-                  currentoffset=0;
+                  cout << "2 image frames come too close, please start again!" << endl;
+                  cout << "gImageframes.size() is " << gImageframes.size() <<endl;
+                  cout << "Timestamp of latest Imageframe: " << gImageframes.back().microSeconds*1000L << endl;
+                  cout << "Timestamp of latest-1 Imageframe: " << gImageframes[gImageframes.size()-2].microSeconds*1000L << endl;
+                  if(gImageframes.size()>2) cout << "Timestamp of latest-2 Imageframe: " << gImageframes[gImageframes.size()-3].microSeconds*1000L << endl;
+                  std::cin.get();
+                  return 1;
               }
-              else if(currentoffset>=0)
+
+              imagelistcurrentsize = gImageframes.size();
+
+              //Since serialPort.waitForReadyRead() need to wait for 5ms
+              //usleep(SYNC_MARGIN);
+              std::this_thread::sleep_for(std::chrono::microseconds(SYNC_MARGIN));
+              //if(IsFirstMatchedFinished) usleep(SYNC_MARGIN); // give some margin so the matching imu frame can arrive
+              //else usleep(FIRST_FRAME_MATCH_MARGIN);
+
+              IsMatched=false;
+
+              //Find the latest imu data in gIMUframes whose
+              for(long i=gIMUframes.size()-1; i>=0 ; i--)
               {
-                  if(currentoffset == 16 && data_in_hex == 0x55) currentoffset=-1;
+                  if(gIMUframes[i].IsSync)
+                  {
+                      cout << "latest imu data with Sync: " << i << ", frame diff is " << i-last_i_index << ", gIMUframes.size() is " << gIMUframes.size() <<endl;
+                      if(!IsFirstMatchedFinished ||
+                          i-last_i_index==IMU_TO_CAM_RATIO)
+                      {
+//                            if(!IsFirstMatchedFinished && i>20)
+//                            {
+//                                cout << "First cam frame must match with imu frame <=20, otherwise has a chance of mismatch!" <<endl;
+//                                std::cin.get();
+//                                return -1;
+//                            }
+                          IsFirstMatchedFinished=true;
+                          image_to_imu_index.push_back(i);
+                          cout << "The " << imagelistcurrentsize-1 << "th image is match with imuframe " << i << ", frame diff is " << i-last_i_index << endl;
+                          last_i_index=i;
+                          IsMatched=true;
+                      }
+                      else    IsMatched=false;
+                      break;
+
+                  }
+              }
+
+              if(!IsMatched)
+              {
+                  //Either camera skipframe or imu capture speed too fast ahead
+                  if(IsFirstMatchedFinished)
+                  {
+                      image_to_imu_index.push_back(last_i_index+IMU_TO_CAM_RATIO);
+                      totalwrongmatch++;
+                      last_i_index+=IMU_TO_CAM_RATIO;
+                      cout << "The " << imagelistcurrentsize-1 << "th image is unmatch, but continue " << endl;
+                  }
                   else
                   {
-                      switch(currentoffset)
-                      {
-                          //waiting for the next byte to complete
-                          case 1: case 3: case 5: case 7: case 9: case 11: case 14:
-                              b_prev = data_in_hex;
-                              break;
-
-                          case 2: case 4: case 6:// accelerometer
-                              sum = (b_prev<<8)+data_in_hex;
-                              value = (sum>ACCELE_MAX_DECIMAL?sum-65536:sum)/ACCELE_LSB_DIVIDER;
-                              if(IsProgramDebug) standardOutput << QObject::tr("===Acc, sum=%1, value=%2").arg(sum).arg(value) << endl;
-                              imuvalue.push_back(value);
-                              break;
-
-                          case 8: case 10: case 12: // gyroscope
-                              sum = (b_prev<<8)+data_in_hex;
-                              value = (sum>GYRO_MAX_DECIMAL?sum-65536:sum)/GYRO_LSB_DIVIDER;
-                              if(IsProgramDebug) standardOutput << QObject::tr("===Gyro, sum=%1, value=%2").arg(sum).arg(value) << endl;
-                              imuvalue.push_back(value);
-                              break;
-
-                          case 13: // whether a syn signal is sent to camera
-                              clock_gettime(CLOCK_REALTIME, &imutime);
-                              if(data_in_hex == 0x01)
-                              {
-                                  // Grab image
-                                  error = cam.RetrieveBuffer(&image);
-                                  if (error != PGRERROR_OK)
-                                  {
-                                      cout << "Error in RetrieveBuffer, skip this image frame" << endl;
-                                      //PrintError2(error);
-                                      //std::cin.get();
-                                      //return -1;
-                                  }
-                                  else
-                                  {
-                                      cv::Mat img;
-                                      std::thread (AddImage, image, std::ref(img)).detach();
-                                      auto t = okvis::Time(image.GetTimeStamp().seconds, image.GetTimeStamp().microSeconds*1e3);
-                                      okvis_estimator.addImage(t, 0, img);
-
-                                      cout << "Finish adding the image to okvis.estimator" << endl;
-                                  }
-
-                              }
-                              break;
-
-                          case 15: // a counter from 0 to 65535
-                              sum = (b_prev<<8)+data_in_hex;
-                              if(IsProgramDebug) standardOutput << QObject::tr("Counter=%1").arg(sum) << endl;
-                              break;
-
-                          default:
-                              if(IsProgramDebug) standardOutput << QObject::tr("Parsing imu data error, j=%1, currentoffset=%2, data_in_hex=%3, re-search 0xAA !!").arg(j).arg(currentoffset).arg(data_in_hex) << endl;
-                              currentoffset=-1;
-                      }
+                      cout << "First cam frame cannot match, stop here, otherwise has a chance of mismatch!" <<endl;
+                      cout << "First image frame timestamp in ns: " << gImageframes.back().microSeconds*1000L << endl;
+                      cout << "gIMUframes.size() is " << gIMUframes.size() <<endl;
+                      ManualStop=true;
+                      std::cin.get();
+                      //image_to_imu_index.push_back(-1); // meaning the first match still not happen
                   }
+
+
               }
-              c++;
-              if(currentoffset>=0) currentoffset++;
 
-              //Flush a new imu frame if imuvalue has more than 6 entry
-              if(imuvalue.size()>=6)
-              {
-                  Eigen::Vector3d gyr;
-                  for (int j = 0; j < 3; ++j) {
-                    gyr[j] = imuvalue[3+j];
-                  }
+              //if(gImageframes.size()==(IMU_FRAME_TO_CAPTURE/IMU_TO_CAM_RATIO)) break;
 
-                  Eigen::Vector3d acc;
-                  for (int j = 0; j < 3; ++j) {
-                    acc[j] = imuvalue[j];
-                  }
-
-                  auto t_imu = okvis::Time(imutime.tv_sec, imutime.tv_nsec);
-
-                  // add the IMU measurement for (blocking) processing if imu timestamp + 1 sec > start
-                  // deltaT is user input argument [skip-first-second], init is 0
-                  //if (t_imu - start + okvis::Duration(1.0) > deltaT) {
-                    okvis_estimator.addImuMeasurement(t_imu, acc, gyr);
-                  //}
-
-
-                  imuvalue.erase (imuvalue.begin(),imuvalue.begin()+6);
-                  cout << "i=" << i << ", An imu frame is captured!" << endl;
-              }
           }
 
+          //Check whether camera thread is already dead by examing the ratio of the
+          //received cam frame and imu frame
+          if((gImageframes.size()> 50 && (double)(gIMUframes.size())/(double)(gImageframes.size()) > IMU_TO_CAM_RATIO +2) ||
+                  (gImageframes.size() == 0 && gIMUframes.size()>1000))
+          {
+              cout << "Camera thread is suspected to be dead, stop" << endl;
+              t1.detach();
+              ManualStop=true;
+          }
+
+
+          //usleep(100); // take a small snap in the empty loop
+          std::this_thread::sleep_for(std::chrono::microseconds(100));
+
+          //cout << "gImageframes.size(): " << gImageframes.size() << endl;
+          //ch = cv::waitKey(10);
+          if(ch == 'q' || ch == 'Q')
+          {
+              ManualStop=true;
+          }
       }
+
       cout << "Main loop ends" << endl;
 
       // Turn trigger mode off.
+      cout << "Turning trigger mode off ... " << endl;
       triggerMode.onOff = false;
       error = cam.SetTriggerMode(&triggerMode);
       if (error != PGRERROR_OK)
@@ -1110,6 +1809,7 @@ int main4(int argc, char **argv)
       cout << "Finished grabbing images" << endl;
 
       // Stop capturing images
+      cout << "Stop capturing images ... " << endl;
       error = cam.StopCapture();
       if (error != PGRERROR_OK)
       {
@@ -1119,6 +1819,7 @@ int main4(int argc, char **argv)
       }
 
       // Disconnect the camera
+      cout << "Disconnecting from the camera ... " << endl;
       error = cam.Disconnect();
       if (error != PGRERROR_OK)
       {

@@ -94,25 +94,32 @@ void DenseMatcher::matchBody(
   // assemble the pairs and return
   const distance_t& const_distratiothres = matchingAlgorithm.distanceRatioThreshold();
   const distance_t& const_distthres = matchingAlgorithm.distanceThreshold();
-  for (size_t i = 0; i < vpairs.size(); ++i) {
-    if (useDistanceRatioThreshold_ && vpairs[i].distance < const_distthres) {
+
+  for (size_t i = 0; i < vpairs.size(); ++i)
+  {
+    if (useDistanceRatioThreshold_ && vpairs[i].distance < const_distthres)
+    {
       const std::vector<pairing_t>& best_matches_list =
           vMyBest[vpairs[i].indexA];
       OKVIS_ASSERT_TRUE_DBG(Exception, best_matches_list[0].indexA != -1,
                             "assertion failed");
 
-      if (best_matches_list[1].indexA != -1) {
+      if (best_matches_list[1].indexA != -1)
+      {
         const distance_t& best_match_distance = best_matches_list[0].distance;
         const distance_t& second_best_match_distance = best_matches_list[1]
             .distance;
         // Only assign if the distance ratio better than the threshold.
         if (best_match_distance == 0
             || second_best_match_distance / best_match_distance
-                > const_distratiothres) {
+                > const_distratiothres)
+        {
           matchingAlgorithm.setBestMatch(vpairs[i].indexA, i,
                                          vpairs[i].distance);
         }
-      } else {
+      }
+      else
+      {
         // If there is only one matching feature, we assign it.
         matchingAlgorithm.setBestMatch(vpairs[i].indexA, i, vpairs[i].distance);
       }
@@ -126,7 +133,8 @@ void DenseMatcher::matchBody(
 
 // Execute a matching algorithm. This is the fast, templated version. Use this.
 template<typename MATCHING_ALGORITHM_T>
-void DenseMatcher::match(MATCHING_ALGORITHM_T & matchingAlgorithm) {
+void DenseMatcher::match(MATCHING_ALGORITHM_T & matchingAlgorithm)
+{
   typedef MATCHING_ALGORITHM_T matching_algorithm_t;
   matchingAlgorithm.doSetup();
 
