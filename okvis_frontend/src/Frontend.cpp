@@ -946,16 +946,16 @@ void Frontend::initialiseBriskFeatureDetectors()
     featureDetectors_.push_back(
         std::shared_ptr<cv::FeatureDetector>(
 
-//#ifdef __ARM_NEON__
+#ifdef __ARM_NEON__
             new cv::GridAdaptedFeatureDetector( 
             new cv::FastFeatureDetector(briskDetectionThreshold_),
                 briskDetectionMaximumKeypoints_, 4, 4 ))); // from config file, except the 7x4...
-//#else
-//            new brisk::ScaleSpaceFeatureDetector<brisk::HarrisScoreCalculator>(
-//                briskDetectionThreshold_, briskDetectionOctaves_,
-//                briskDetectionAbsoluteThreshold_,
-//                briskDetectionMaximumKeypoints_)));
-//#endif
+#else
+            new brisk::ScaleSpaceFeatureDetector<brisk::HarrisScoreCalculator>(
+                briskDetectionThreshold_, briskDetectionOctaves_,
+                briskDetectionAbsoluteThreshold_,
+                briskDetectionMaximumKeypoints_)));
+#endif
 
     descriptorExtractors_.push_back(
         std::shared_ptr<cv::DescriptorExtractor>(

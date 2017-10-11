@@ -113,7 +113,8 @@ using namespace cv;
 #define FIRST_FRAME_MATCH_MARGIN    (SYNC_MARGIN*4)
 
 bool isFirstCamCapture=false;
-okvis::Time latestcamtime;
+//okvis::Time latestcamtime;
+cv::Mat latestImage;
 
 struct imudata
 {
@@ -257,6 +258,11 @@ void CamRetrieveBuffer(Camera &cam, okvis::ThreadedKFVio &okvis_estimator)
     Image image;
     int i=0;
     timespec camtime, tend;
+    int last_i_index=0;
+    bool IsMatched;
+    bool IsFirstMatchedFinished=false;
+    unsigned long long imu_period_in_nsec = 1000000000/IMU_Hz;
+    okvis::Time lastcamtime;
 
     while(!ManualStop)
     {
@@ -302,17 +308,94 @@ void CamRetrieveBuffer(Camera &cam, okvis::ThreadedKFVio &okvis_estimator)
                 image.Convert(PIXEL_FORMAT_MONO8, &convertedImage);
 
                 //cv::Mat img = cv::Mat(image.GetRows(), image.GetCols(), CV_8UC1, convertedImage.GetData());
-                cv::Mat img = cv::Mat(image.GetRows(), image.GetCols(), CV_8UC1);
-                memcpy( img.data, convertedImage.GetData(), image.GetRows()*image.GetCols());
+                latestImage = cv::Mat(image.GetRows(), image.GetCols(), CV_8UC1);
+                memcpy( latestImage.data, convertedImage.GetData(), image.GetRows()*image.GetCols());
                 //cout << "img.type(): " << img.type() << endl;
                 //cv::Mat convertedimg;
                 //img.convertTo(convertedimg, CV_16UC1);
                 //cv::imwrite( "zzz.jpg", img );
 
-                latestcamtime = okvis::Time(image.GetTimeStamp().seconds, image.GetTimeStamp().microSeconds*1e3);
+                //latestcamtime = okvis::Time(image.GetTimeStamp().seconds, image.GetTimeStamp().microSeconds*1e3);
                 //timespec_get(&camtime, TIME_UTC);
                 //latestcamtime = okvis::Time(camtime.tv_sec, camtime.tv_nsec);
-                okvis_estimator.addImage(latestcamtime, 0, img);
+                //okvis_estimator.addImage(latestcamtime, 0, img);
+
+                //do the matching directly here
+//                std::this_thread::sleep_for(std::chrono::microseconds(SYNC_MARGIN));
+//                for(long j=gIMUframes.size()-1; j>=0 ; j--)
+//                {
+//                    if(gIMUframes[j].IsSync)
+//                    {
+//                        cout << "latest imu data with Sync: " << j << ", frame diff is " << j-last_i_index << ", gIMUframes.size() is " << gIMUframes.size() <<endl;
+//                        if(!IsFirstMatchedFinished ||
+//                            j-last_i_index==IMU_TO_CAM_RATIO)
+//                        {
+//                            IsFirstMatchedFinished=true;
+//                            cout << "The " << i-1 << "th image is match with imuframe " << j << ", frame diff is " << j-last_i_index << endl;
+//                            last_i_index=j;
+//                            IsMatched=true;
+
+//                        }
+//                        else    IsMatched=false;
+//                        break;
+
+//                    }
+//                }
+
+//                if(!IsMatched)
+//                {
+//                    //Either camera skipframe or imu capture speed too fast ahead
+//                    if(IsFirstMatchedFinished)
+//                    {
+//                        //image_to_imu_index.push_back(last_i_index+IMU_TO_CAM_RATIO);
+//                        //totalwrongmatch++;
+//                        last_i_index+=IMU_TO_CAM_RATIO;
+//                        cout << "The " << i-1 << "th image is unmatch, but continue " << endl;
+//                    }
+//                    else
+//                    {
+//                        cout << "First cam frame cannot match, stop here, otherwise has a chance of mismatch!" <<endl;
+//                        cout << "First image frame timestamp in ns: " << image.GetTimeStamp().microSeconds*1000L << endl;
+//                        cout << "gIMUframes.size() is " << gIMUframes.size() <<endl;
+//                        ManualStop=true;
+//                        std::cin.get();
+//                        //image_to_imu_index.push_back(-1); // meaning the first match still not happen
+//                    }
+
+
+//                }
+
+//                //Update estimator
+//                okvis::Time latestcamtime = okvis::Time(image.GetTimeStamp().seconds, image.GetTimeStamp().microSeconds*1e3);
+
+//                //From i, update the previous imu frame to estimator until reaching the previous sync
+//                for(long k=last_i_index-19; k<=last_i_index;k++)
+//                {
+//                    if(k<0) continue;
+//                    Eigen::Vector3d gyr, acc;
+//                    gyr[0] = gIMUframes[k].gyro_x;
+//                    gyr[1] = gIMUframes[k].gyro_y;
+//                    gyr[2] = gIMUframes[k].gyro_z;
+//                    acc[0] = gIMUframes[k].acc_x;
+//                    acc[1] = gIMUframes[k].acc_y;
+//                    acc[2] = gIMUframes[k].acc_z;
+
+//                    okvis::Time t_imu = latestcamtime - okvis::Duration(0, (last_i_index-k)*imu_period_in_nsec);
+//                    if(t_imu>lastcamtime)
+//                    {
+//                        okvis_estimator.addImuMeasurement(t_imu, acc, gyr);
+//                        //cout << "Finish adding the imu data to okvis.estimator with timestamp: " << t_imu << endl;
+//                    }
+//                    else
+//                    {
+//                        cout << "An imu frame is ignored since its calculated t_imu < lastcamtime" << endl;
+//                    }
+
+//                }
+
+//                lastcamtime = latestcamtime;
+//                okvis_estimator.addImage(latestcamtime, 0, latestImage);
+//                cout << "Finish adding the image to okvis.estimator with timestamp: " << latestcamtime << endl;
 
 
                 if(!isFirstCamCapture)
@@ -323,7 +406,7 @@ void CamRetrieveBuffer(Camera &cam, okvis::ThreadedKFVio &okvis_estimator)
     //                timespec_get(&first_image_timestamp, TIME_UTC);
                 }
 
-                cout << "Finish adding the image to okvis.estimator with timestamp: " << latestcamtime << endl;
+                //cout << "Finish adding the image to okvis.estimator with timestamp: " << latestcamtime << endl;
             }
             //if(BothStart) SaveImage(image, dest);
 
@@ -573,45 +656,45 @@ void ReadIMUdata(QSerialPort &serialPort, okvis::ThreadedKFVio &okvis_estimator)
                    i++;
                    if(i%100==0) cout << "i=" << i << ", An imu frame is captured!" << endl;
 
-                   Eigen::Vector3d gyr;
-                   for (int j = 0; j < 3; ++j) {
-                     gyr[j] = imuvalue[3+j];
-                   }
+//                   Eigen::Vector3d gyr;
+//                   for (int j = 0; j < 3; ++j) {
+//                     gyr[j] = imuvalue[3+j];
+//                   }
 
-                   Eigen::Vector3d acc;
-                   for (int j = 0; j < 3; ++j) {
-                     acc[j] = imuvalue[j];
-                   }
+//                   Eigen::Vector3d acc;
+//                   for (int j = 0; j < 3; ++j) {
+//                     acc[j] = imuvalue[j];
+//                   }
 
-                   okvis::Time t_imu;
-                   if(isFirstCamCapture)
-                   {
-                       if(lastcamtime!=latestcamtime) IsWaitCamFrameCome=false;
-                       //If cam frame still not capture but the corresponding imu frame with sync is arrived
-                       if(IsWaitCamFrameCome||(lastcamtime==latestcamtime && awayfromlastsynccounter==0))
-                       {
-                           // *0.3, avoid exceeding next correct sync timestamp
-                           t_imu = latestcamtime + okvis::Duration(0, 20*imu_period_in_nsec + awayfromlastsynccounter*imu_period_in_nsec*0.3);
-                           IsWaitCamFrameCome=true;
-                       }
-                       else
-                       {
-                           t_imu = latestcamtime + okvis::Duration(0, (awayfromlastsynccounter)*imu_period_in_nsec);
-                       }
-                       lastcamtime = latestcamtime;
-                   }
-                   else
-                   {
-                       t_imu = okvis::Time(imutime.tv_sec, imutime.tv_nsec);
-                   }
+//                   okvis::Time t_imu;
+//                   if(isFirstCamCapture)
+//                   {
+//                       if(lastcamtime!=latestcamtime) IsWaitCamFrameCome=false;
+//                       //If cam frame still not capture but the corresponding imu frame with sync is arrived
+//                       if(IsWaitCamFrameCome||(lastcamtime==latestcamtime && awayfromlastsynccounter==0))
+//                       {
+//                           // *0.001, avoid exceeding next correct sync timestamp
+//                           t_imu = latestcamtime + okvis::Duration(0, 20*imu_period_in_nsec + awayfromlastsynccounter*imu_period_in_nsec*0.001);
+//                           IsWaitCamFrameCome=true;
+//                       }
+//                       else
+//                       {
+//                           t_imu = latestcamtime + okvis::Duration(0, (awayfromlastsynccounter)*imu_period_in_nsec);
+//                       }
+//                       lastcamtime = latestcamtime;
+//                   }
+//                   else
+//                   {
+//                       t_imu = okvis::Time(imutime.tv_sec, imutime.tv_nsec);
+//                   }
 
 
-                   // add the IMU measurement for (blocking) processing if imu timestamp + 1 sec > start
-                   // deltaT is user input argument [skip-first-second], init is 0
-                   //if (t_imu - start + okvis::Duration(1.0) > deltaT) {
-                     okvis_estimator.addImuMeasurement(t_imu, acc, gyr);
-                     cout << "Finish adding the imu data to okvis.estimator with timestamp: " << t_imu << endl;
-                   //}
+//                   // add the IMU measurement for (blocking) processing if imu timestamp + 1 sec > start
+//                   // deltaT is user input argument [skip-first-second], init is 0
+//                   //if (t_imu - start + okvis::Duration(1.0) > deltaT) {
+//                     okvis_estimator.addImuMeasurement(t_imu, acc, gyr);
+//                     cout << "Finish adding the imu data to okvis.estimator with timestamp: " << t_imu << endl;
+//                   //}
                 }
                 //}
 
@@ -999,7 +1082,161 @@ int main5(int argc, char **argv)
     return 0;
 }
 
+void MatchingAndUpdateEstimator(okvis::ThreadedKFVio &okvis_estimator)
+{
+    //Do matching on the global vector data
+    int last_i_index=0;
+    bool IsMatched;
+    bool IsFirstMatchedFinished=false;
+    //long totalwrongmatch=0;
+    char ch=0;
+    //std::vector<long> image_to_imu_index;
+    unsigned long long imu_period_in_nsec = 1000000000/IMU_Hz;
+    okvis::Time lastcamtime;
+    long imagelistcurrentsize=0;
 
+    clock_t end, begin;
+    while(!ManualStop)
+    {
+        if(gImageframes.size()>imagelistcurrentsize) // if new image frame arrive
+        {
+            begin = clock();
+            //cout << "Img timestamp in microsecond: " << gImageframes.back().microSeconds << endl;
+            //Check if it is a jump in the index
+            if(gImageframes.size()>imagelistcurrentsize+1)
+            {
+                //cout << "2 image frames come too close, please start again!" << endl;
+                cout << "There is a jump on gImageframes!" << endl;
+                cout << "gImageframes.size() is " << gImageframes.size() <<endl;
+                cout << "gIMUframes.size() is " << gIMUframes.size() <<endl;
+//                cout << "imagelistcurrentsize is " << imagelistcurrentsize << endl;
+//                cout << "Timestamp of latest Imageframe: " << gImageframes.back().microSeconds*1000L << endl;
+//                cout << "Timestamp of latest-1 Imageframe: " << gImageframes[gImageframes.size()-2].microSeconds*1000L << endl;
+//                if(gImageframes.size()>2) cout << "Timestamp of latest-2 Imageframe: " << gImageframes[gImageframes.size()-3].microSeconds*1000L << endl;
+//                std::cin.get();
+                //return 1;
+            }
+
+            imagelistcurrentsize = gImageframes.size();
+
+            //Since serialPort.waitForReadyRead() need to wait for 5ms
+            //usleep(SYNC_MARGIN);
+            std::this_thread::sleep_for(std::chrono::microseconds(SYNC_MARGIN));
+            //if(IsFirstMatchedFinished) usleep(SYNC_MARGIN); // give some margin so the matching imu frame can arrive
+            //else usleep(FIRST_FRAME_MATCH_MARGIN);
+
+            IsMatched=false;
+
+            //Find the latest imu data in gIMUframes whose
+            for(long i=gIMUframes.size()-1; i>=0 ; i--)
+            {
+                if(gIMUframes[i].IsSync)
+                {
+                    cout << "latest imu data with Sync: " << i << ", frame diff is " << i-last_i_index << ", gIMUframes.size() is " << gIMUframes.size() <<endl;
+                    if(!IsFirstMatchedFinished ||
+                        i-last_i_index==IMU_TO_CAM_RATIO)
+                    {
+//                            if(!IsFirstMatchedFinished && i>20)
+//                            {
+//                                cout << "First cam frame must match with imu frame <=20, otherwise has a chance of mismatch!" <<endl;
+//                                std::cin.get();
+//                                return -1;
+//                            }
+                        IsFirstMatchedFinished=true;
+                        //image_to_imu_index.push_back(i);
+                        cout << "The " << imagelistcurrentsize-1 << "th image is match with imuframe " << i << ", frame diff is " << i-last_i_index << endl;
+                        last_i_index=i;
+                        IsMatched=true;
+
+                    }
+                    else    IsMatched=false;
+                    break;
+
+                }
+            }
+
+            if(!IsMatched)
+            {
+                //Either camera skipframe or imu capture speed too fast ahead
+                if(IsFirstMatchedFinished)
+                {
+                    //image_to_imu_index.push_back(last_i_index+IMU_TO_CAM_RATIO);
+                    //totalwrongmatch++;
+                    last_i_index+=IMU_TO_CAM_RATIO;
+                    cout << "The " << imagelistcurrentsize-1 << "th image is unmatch, but continue " << endl;
+                }
+                else
+                {
+                    cout << "First cam frame cannot match, stop here, otherwise has a chance of mismatch!" <<endl;
+                    cout << "First image frame timestamp in ns: " << gImageframes.back().microSeconds*1000L << endl;
+                    cout << "gIMUframes.size() is " << gIMUframes.size() <<endl;
+                    ManualStop=true;
+                    std::cin.get();
+                    //image_to_imu_index.push_back(-1); // meaning the first match still not happen
+                }
+
+
+            }
+
+            //Update estimator
+            okvis::Time latestcamtime = okvis::Time(gImageframes.back().seconds, gImageframes.back().microSeconds*1e3);
+
+            //From i, update the previous imu frame to estimator until reaching the previous sync
+            for(long k=last_i_index-19; k<=last_i_index;k++)
+            {
+                if(k<0) continue;
+                Eigen::Vector3d gyr, acc;
+                gyr[0] = gIMUframes[k].gyro_x;
+                gyr[1] = gIMUframes[k].gyro_y;
+                gyr[2] = gIMUframes[k].gyro_z;
+                acc[0] = gIMUframes[k].acc_x;
+                acc[1] = gIMUframes[k].acc_y;
+                acc[2] = gIMUframes[k].acc_z;
+
+                okvis::Time t_imu = latestcamtime - okvis::Duration(0, (last_i_index-k)*imu_period_in_nsec);
+                if(t_imu>lastcamtime)
+                {
+                    okvis_estimator.addImuMeasurement(t_imu, acc, gyr);
+                    //cout << "Finish adding the imu data to okvis.estimator with timestamp: " << t_imu << endl;
+                }
+                else
+                {
+                    cout << "An imu frame is ignored since its calculated t_imu < lastcamtime" << endl;
+                }
+
+            }
+
+            lastcamtime = latestcamtime;
+            okvis_estimator.addImage(latestcamtime, 0, latestImage);
+            cout << "Finish adding the image to okvis.estimator with timestamp: " << latestcamtime << endl;
+
+            //if(gImageframes.size()==(IMU_FRAME_TO_CAPTURE/IMU_TO_CAM_RATIO)) break;
+            end=clock();
+            cout << "Time elapse in matching (in ms): " << ((float)(end-begin)/CLOCKS_PER_SEC)*1e3 << endl;
+        }
+
+        //Check whether camera thread is already dead by examing the ratio of the
+        //received cam frame and imu frame
+        if((gImageframes.size()> 50 && (double)(gIMUframes.size())/(double)(gImageframes.size()) > IMU_TO_CAM_RATIO +2) ||
+                (gImageframes.size() == 0 && gIMUframes.size()>1000))
+        {
+            cout << "Camera thread is suspected to be dead, stop" << endl;
+            //t1.detach();
+            ManualStop=true;
+        }
+
+
+        //usleep(100); // take a small snap in the empty loop
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+
+        //cout << "gImageframes.size(): " << gImageframes.size() << endl;
+        //ch = cv::waitKey(10);
+        if(ch == 'q' || ch == 'Q')
+        {
+            ManualStop=true;
+        }
+    }
+}
 
 // this is just a workbench. most of the stuff here will go into the Frontend class.
 int main(int argc, char **argv)
@@ -1068,11 +1305,12 @@ int main(int argc, char **argv)
 
   //indicates whether the addMeasurement() functions
   //should return immediately (blocking=false), or only when the processing is complete.
-  okvis_estimator.setBlocking(true);
+
 
   //run offline by providing the dataset
   if (argc>=3)
   {
+      okvis_estimator.setBlocking(true);
       // the folder path
       std::string path(argv[2]);
 
@@ -1253,6 +1491,7 @@ int main(int argc, char **argv)
   // RUN ONLINE
   else
   {
+      okvis_estimator.setBlocking(false);
       std::thread t1,t2;
       QTextStream standardOutput(stdout);
       Camera cam;
@@ -1603,10 +1842,6 @@ int main(int argc, char **argv)
       int hasSync=0;
       int imuSyncIndex=-1;
       int k_when_first_capture=-1;
-      int last_i_index=0;
-      bool IsMatched;
-      bool IsFirstMatchedFinished=false;
-      long totalwrongmatch=0;
 
 
       //waitForReadyRead(): Blocks until new data is available for reading and the readyRead()
@@ -1669,7 +1904,7 @@ int main(int argc, char **argv)
       //usleep(SECOND_TO_SLEEP_AT_START*1e6);
       std::this_thread::sleep_for(std::chrono::seconds(SECOND_TO_SLEEP_AT_START));
 
-      char ch=0;
+
 
       //get start at the middle of 2 sync signals
       while(awayfromlastsynccounter!=IMU_TO_CAM_RATIO/2)
@@ -1683,114 +1918,12 @@ int main(int argc, char **argv)
       cout << "BothStart=true" << endl;
       cout << "Now timestamp= " << tmp.tv_nsec<< endl;
 
-      //Do matching on the global vector data
-      std::vector<long> image_to_imu_index;
-
-      long imagelistcurrentsize=0;
-      while(!ManualStop)
+      std::thread(MatchingAndUpdateEstimator, std::ref(okvis_estimator)).detach();
+      while(true)
       {
           okvis_estimator.display(); // show all OKVIS's camera
+          cv::waitKey(PLAY_DELAY_IN_MS);
           poseViewer.display();
-
-          if(gImageframes.size()>imagelistcurrentsize) // if new image frame arrive
-          {
-              //cout << "Img timestamp in microsecond: " << gImageframes.back().microSeconds << endl;
-              //Check if it is a jump in the index
-              if(gImageframes.size()>imagelistcurrentsize+1)
-              {
-                  cout << "2 image frames come too close, please start again!" << endl;
-                  cout << "gImageframes.size() is " << gImageframes.size() <<endl;
-                  cout << "Timestamp of latest Imageframe: " << gImageframes.back().microSeconds*1000L << endl;
-                  cout << "Timestamp of latest-1 Imageframe: " << gImageframes[gImageframes.size()-2].microSeconds*1000L << endl;
-                  if(gImageframes.size()>2) cout << "Timestamp of latest-2 Imageframe: " << gImageframes[gImageframes.size()-3].microSeconds*1000L << endl;
-                  std::cin.get();
-                  return 1;
-              }
-
-              imagelistcurrentsize = gImageframes.size();
-
-              //Since serialPort.waitForReadyRead() need to wait for 5ms
-              //usleep(SYNC_MARGIN);
-              std::this_thread::sleep_for(std::chrono::microseconds(SYNC_MARGIN));
-              //if(IsFirstMatchedFinished) usleep(SYNC_MARGIN); // give some margin so the matching imu frame can arrive
-              //else usleep(FIRST_FRAME_MATCH_MARGIN);
-
-              IsMatched=false;
-
-              //Find the latest imu data in gIMUframes whose
-              for(long i=gIMUframes.size()-1; i>=0 ; i--)
-              {
-                  if(gIMUframes[i].IsSync)
-                  {
-                      cout << "latest imu data with Sync: " << i << ", frame diff is " << i-last_i_index << ", gIMUframes.size() is " << gIMUframes.size() <<endl;
-                      if(!IsFirstMatchedFinished ||
-                          i-last_i_index==IMU_TO_CAM_RATIO)
-                      {
-//                            if(!IsFirstMatchedFinished && i>20)
-//                            {
-//                                cout << "First cam frame must match with imu frame <=20, otherwise has a chance of mismatch!" <<endl;
-//                                std::cin.get();
-//                                return -1;
-//                            }
-                          IsFirstMatchedFinished=true;
-                          image_to_imu_index.push_back(i);
-                          cout << "The " << imagelistcurrentsize-1 << "th image is match with imuframe " << i << ", frame diff is " << i-last_i_index << endl;
-                          last_i_index=i;
-                          IsMatched=true;
-                      }
-                      else    IsMatched=false;
-                      break;
-
-                  }
-              }
-
-              if(!IsMatched)
-              {
-                  //Either camera skipframe or imu capture speed too fast ahead
-                  if(IsFirstMatchedFinished)
-                  {
-                      image_to_imu_index.push_back(last_i_index+IMU_TO_CAM_RATIO);
-                      totalwrongmatch++;
-                      last_i_index+=IMU_TO_CAM_RATIO;
-                      cout << "The " << imagelistcurrentsize-1 << "th image is unmatch, but continue " << endl;
-                  }
-                  else
-                  {
-                      cout << "First cam frame cannot match, stop here, otherwise has a chance of mismatch!" <<endl;
-                      cout << "First image frame timestamp in ns: " << gImageframes.back().microSeconds*1000L << endl;
-                      cout << "gIMUframes.size() is " << gIMUframes.size() <<endl;
-                      ManualStop=true;
-                      std::cin.get();
-                      //image_to_imu_index.push_back(-1); // meaning the first match still not happen
-                  }
-
-
-              }
-
-              //if(gImageframes.size()==(IMU_FRAME_TO_CAPTURE/IMU_TO_CAM_RATIO)) break;
-
-          }
-
-          //Check whether camera thread is already dead by examing the ratio of the
-          //received cam frame and imu frame
-          if((gImageframes.size()> 50 && (double)(gIMUframes.size())/(double)(gImageframes.size()) > IMU_TO_CAM_RATIO +2) ||
-                  (gImageframes.size() == 0 && gIMUframes.size()>1000))
-          {
-              cout << "Camera thread is suspected to be dead, stop" << endl;
-              t1.detach();
-              ManualStop=true;
-          }
-
-
-          //usleep(100); // take a small snap in the empty loop
-          std::this_thread::sleep_for(std::chrono::microseconds(100));
-
-          //cout << "gImageframes.size(): " << gImageframes.size() << endl;
-          //ch = cv::waitKey(10);
-          if(ch == 'q' || ch == 'Q')
-          {
-              ManualStop=true;
-          }
       }
 
       cout << "Main loop ends" << endl;
