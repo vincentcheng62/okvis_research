@@ -69,7 +69,7 @@ using namespace cv;
 // Camera hardware setting: NA: 4.0, focusing range: infinity
 #define ISCAMERA_SETTING_DEFAULT    (false)
 #define CAMERA_SHUTTER_TIME_IN_MS (4.0) // tune the shutter time to avoid motion blur
-#define CAMERA_SHUTTER_LOG_FOR_RUN_MULTIPLER    (1) // default 2.5 for looking at ceiling
+#define CAMERA_SHUTTER_LOG_FOR_RUN_MULTIPLER    (2.5) // default 2.5 for looking at ceiling
 #define CAMERA_EXPOSURE_IN_EV (1.0) // orig: 0.939
 #define CAMERA_GAIN_IN_dB (35.0) // orig: 0.939
 #define CAMERA_GAIN_LOG_FOR_RUN_MULTIPLER    (0.25) // default 0.25 for looking at ceiling
@@ -108,7 +108,7 @@ using namespace cv;
 //Keep it 10000 if want to achieve good repeatibility in okvis
 #define IMU_FRAME_TO_CAPTURE (50000) // 57000 for luyujie loop in fuyong
 
-
+//#define IsNormalizeImage (true)
 #define SYNC_MARGIN (4000) // margin in ms, after a new camera frame arrive, wait SYNC_MARGIN ms and get the latest imu frame with sync=0x01
 #define FIRST_FRAME_MATCH_MARGIN    (SYNC_MARGIN*4)
 
@@ -307,9 +307,20 @@ void CamRetrieveBuffer(Camera &cam, okvis::ThreadedKFVio &okvis_estimator)
                 Image convertedImage;
                 image.Convert(PIXEL_FORMAT_MONO8, &convertedImage);
 
-                //cv::Mat img = cv::Mat(image.GetRows(), image.GetCols(), CV_8UC1, convertedImage.GetData());
-                latestImage = cv::Mat(image.GetRows(), image.GetCols(), CV_8UC1);
-                memcpy( latestImage.data, convertedImage.GetData(), image.GetRows()*image.GetCols());
+                //if(!IsNormalizeImage)
+                //{
+                    //cv::Mat img = cv::Mat(image.GetRows(), image.GetCols(), CV_8UC1, convertedImage.GetData());
+                    latestImage = cv::Mat(image.GetRows(), image.GetCols(), CV_8UC1);
+                    memcpy( latestImage.data, convertedImage.GetData(), image.GetRows()*image.GetCols());
+//                }
+//                else
+//                {
+//                    cv::Mat latestImage = cv::Mat(image.GetRows(), image.GetCols(), CV_8UC1);
+//                    cv::Mat beforenormImg = cv::Mat(image.GetRows(), image.GetCols(), CV_8UC1);
+//                    memcpy( beforenormImg.data, convertedImage.GetData(), image.GetRows()*image.GetCols());
+//                    cv::normalize(beforenormImg,  latestImage, 0, 255, cv.NORM_MINMAX)
+//                }
+
                 //cout << "img.type(): " << img.type() << endl;
                 //cv::Mat convertedimg;
                 //img.convertTo(convertedimg, CV_16UC1);

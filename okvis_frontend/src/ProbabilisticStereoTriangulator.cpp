@@ -169,7 +169,8 @@ bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::stereoTriangulate(
     size_t keypointIdxA, size_t keypointIdxB,
     Eigen::Vector4d& outHomogeneousPoint_A,
     bool & outCanBeInitializedInaccuarate,
-    double sigmaRay) const {
+    double sigmaRay) const
+{
 
   OKVIS_ASSERT_TRUE_DBG(Exception,frameA_&&frameB_,"initialize with frames before use!");
 
@@ -216,6 +217,8 @@ bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::stereoTriangulate(
     isValid = false;
     return false;
   }
+
+  //if none of the reprojection error exceed 4 px
   if (errA > 4.0 || errB > 4.0) {
     isValid = false;
   }
@@ -231,7 +234,8 @@ template<class CAMERA_GEOMETRY_T>
 bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::stereoTriangulate(
     size_t keypointIdxA, size_t keypointIdxB,
     Eigen::Vector4d& outHomogeneousPoint_A, Eigen::Matrix3d& outPointUOplus_A,
-    bool& outCanBeInitialized, double sigmaRay) const {
+    bool& outCanBeInitialized, double sigmaRay) const
+{
   OKVIS_ASSERT_TRUE_DBG(Exception,frameA_&&frameB_,"initialize with frames before use!");
 
   // get the triangulation
@@ -253,7 +257,8 @@ template<class CAMERA_GEOMETRY_T>
 void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::getUncertainty(
     size_t keypointIdxA, size_t keypointIdxB,
     const Eigen::Vector4d& homogeneousPoint_A,
-    Eigen::Matrix3d& outPointUOplus_A, bool& outCanBeInitialized) const {
+    Eigen::Matrix3d& outPointUOplus_A, bool& outCanBeInitialized) const
+{
   OKVIS_ASSERT_TRUE_DBG(Exception,frameA_&&frameB_,"initialize with frames before use!");
 
   // also get the point in the other coordinate representation
@@ -279,6 +284,7 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::getUncertainty(
   ::okvis::ceres::ReprojectionError<CAMERA_GEOMETRY_T> reprojectionErrorA(
       frameA_->geometryAs<CAMERA_GEOMETRY_T>(camIdA_), 0, kptA,
       inverseMeasurementCovariance);
+
   //typename keypointA_t::measurement_t residualA;
   Eigen::Matrix<double, 2, 1> residualA;
   Eigen::Matrix<double, 2, 4, Eigen::RowMajor> J_hpA;
@@ -346,7 +352,8 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::getUncertainty(
 
   // invert (if invertible) to get covariance:
   Eigen::Matrix<double, 9, 9> cov;
-  if (H.colPivHouseholderQr().rank() < 9) {
+  if (H.colPivHouseholderQr().rank() < 9)
+  {
     outCanBeInitialized = false;
     return;
   }
@@ -359,7 +366,8 @@ template<class CAMERA_GEOMETRY_T>
 bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::computeReprojectionError4(
     const std::shared_ptr<okvis::MultiFrame>& frame, size_t camId,
     size_t keypointId, const Eigen::Vector4d& homogeneousPoint,
-    double& outError) const {
+    double& outError) const
+{
 
   OKVIS_ASSERT_LT_DBG(Exception, keypointId, frame->numKeypoints(camId),
       "Index out of bounds");
@@ -367,7 +375,9 @@ bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::computeReprojectionErro
   okvis::cameras::CameraBase::ProjectionStatus status = frame
       ->geometryAs<CAMERA_GEOMETRY_T>(camId)->projectHomogeneous(
       homogeneousPoint, &y);
-  if (status == okvis::cameras::CameraBase::ProjectionStatus::Successful) {
+
+  if (status == okvis::cameras::CameraBase::ProjectionStatus::Successful)
+  {
     Eigen::Vector2d k;
     Eigen::Matrix2d inverseCov = Eigen::Matrix2d::Identity();
     double keypointStdDev;
@@ -379,7 +389,8 @@ bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::computeReprojectionErro
     y -= k;
     outError = y.dot(inverseCov * y);
     return true;
-  } else
+  }
+  else
     return false;
 }
 

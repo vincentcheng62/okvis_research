@@ -52,7 +52,8 @@ Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1,
                                 const Eigen::Vector3d& e1,
                                 const Eigen::Vector3d& p2,
                                 const Eigen::Vector3d& e2, double sigma,
-                                bool& isValid, bool& isParallel) {
+                                bool& isValid, bool& isParallel)
+{
   isParallel = false; // This should be the default.
   // But parallel and invalid is not the same. Points at infinity are valid and parallel.
   isValid = false; // hopefully this will be reset to true.
@@ -79,7 +80,8 @@ Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1,
   A(0, 1) = -A(1, 0);
   A(1, 1) = -e2.dot(e2);
 
-  if (A(1, 0) < 0.0) {
+  if (A(1, 0) < 0.0)
+  {
     A(1, 0) = -A(1, 0);
     A(0, 1) = -A(0, 1);
     // wrong viewing direction
@@ -89,10 +91,13 @@ Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1,
   Eigen::Matrix2d A_inverse;
   A.computeInverseWithCheck(A_inverse, invertible, 1.0e-6);
   Eigen::Vector2d lambda = A_inverse * b;
-  if (!invertible) {
+
+  if (!invertible)
+  {
     isParallel = true; // let's note this.
     // parallel. that's fine. but A is not invertible. so handle it separately.
-    if ((e1.cross(e2)).norm() < 6 * sigma){
+    if ((e1.cross(e2)).norm() < 6 * sigma)
+    {
        isValid = true;  // check parallel
     }
     return (Eigen::Vector4d((e1[0] + e2[0]) / 2.0, (e1[1] + e2[1]) / 2.0,

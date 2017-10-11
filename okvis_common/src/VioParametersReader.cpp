@@ -152,6 +152,13 @@ void VioParametersReader::readConfigFile(const std::string& filename) {
       "'detection matching threshold' parameter missing in configuration file.");
   file["detection_options"]["matching_threshold"] >> vioParameters_.optimization.detectionMatchingThreshold;
 
+  // detection matching ratio threshold
+  success = file["detection_options"]["matching_ratio_threshold"].isReal();
+  OKVIS_ASSERT_TRUE(
+      Exception, success,
+      "'detection matching ratio threshold' parameter missing in configuration file.");
+  file["detection_options"]["matching_ratio_threshold"] >> vioParameters_.optimization.detectionMatchingRatioThreshold;
+
   // detection octaves
   success = file["detection_options"]["octaves"].isInt();
   OKVIS_ASSERT_TRUE(

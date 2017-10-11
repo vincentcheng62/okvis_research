@@ -47,7 +47,8 @@ namespace okvis {
 template<typename MATCHING_ALGORITHM_T>
 void DenseMatcher::matchBody(
     void (DenseMatcher::*doWorkPtr)(MatchJob&, MATCHING_ALGORITHM_T*),
-    MATCHING_ALGORITHM_T& matchingAlgorithm) {
+    MATCHING_ALGORITHM_T& matchingAlgorithm)
+{
   // create lock list
   std::mutex* locks = new std::mutex[matchingAlgorithm.sizeB()];
 
@@ -64,7 +65,8 @@ void DenseMatcher::matchBody(
 
   // prepare the jobs for the threads
   std::vector<MatchJob> jobs(numMatcherThreads_);
-  for (int i = 0; i < numMatcherThreads_; ++i) {
+  for (int i = 0; i < numMatcherThreads_; ++i)
+  {
     jobs[i].iThreadID = i;
     jobs[i].vpairs = &vpairs;
     jobs[i].vMyBest = &vMyBest;
@@ -73,7 +75,8 @@ void DenseMatcher::matchBody(
 
   //create all threads
   //  boost::thread_group matchers;
-  for (int i = 0; i < numMatcherThreads_; ++i) {
+  for (int i = 0; i < numMatcherThreads_; ++i)
+  {
     matcherThreadPool_->enqueue(doWorkPtr, this, jobs[i], &matchingAlgorithm);
     //    matchers.create_thread(boost::bind(doWorkPtr, this, jobs[i], &matchingAlgorithm));
   }
@@ -109,10 +112,10 @@ void DenseMatcher::matchBody(
         const distance_t& best_match_distance = best_matches_list[0].distance;
         const distance_t& second_best_match_distance = best_matches_list[1]
             .distance;
+
         // Only assign if the distance ratio better than the threshold.
-        if (best_match_distance == 0
-            || second_best_match_distance / best_match_distance
-                > const_distratiothres)
+        if (best_match_distance == 0 ||
+                second_best_match_distance / best_match_distance > const_distratiothres)
         {
           matchingAlgorithm.setBestMatch(vpairs[i].indexA, i,
                                          vpairs[i].distance);
@@ -123,7 +126,11 @@ void DenseMatcher::matchBody(
         // If there is only one matching feature, we assign it.
         matchingAlgorithm.setBestMatch(vpairs[i].indexA, i, vpairs[i].distance);
       }
-    } else if (vpairs[i].distance < const_distthres) {
+    }
+
+    //Not using distance ratio
+    else if (vpairs[i].distance < const_distthres)
+    {
       matchingAlgorithm.setBestMatch(vpairs[i].indexA, i, vpairs[i].distance);
     }
   }
@@ -136,7 +143,7 @@ template<typename MATCHING_ALGORITHM_T>
 void DenseMatcher::match(MATCHING_ALGORITHM_T & matchingAlgorithm)
 {
   typedef MATCHING_ALGORITHM_T matching_algorithm_t;
-  matchingAlgorithm.doSetup();
+  matchingAlgorithm.doSetup(); // for each keypoint, project and get uncertainty
 
   // call the matching body with the linear matching function pointer
   matchBody(&DenseMatcher::template doWorkLinearMatching<matching_algorithm_t>,
@@ -189,13 +196,15 @@ inline void DenseMatcher::listBIteration(
 // The threading worker. This matches a keypoint with every other keypoint to find the best match.
 template<typename MATCHING_ALGORITHM_T>
 void DenseMatcher::doWorkLinearMatching(
-    MatchJob & my_job, MATCHING_ALGORITHM_T * matchingAlgorithm) {
+    MatchJob & my_job, MATCHING_ALGORITHM_T * matchingAlgorithm)
+{
   OKVIS_ASSERT_TRUE(std::runtime_error, matchingAlgorithm != NULL,
                     "matching algorithm is NULL");
   try {
     int start = my_job.iThreadID;
     distance_t const_distthres = matchingAlgorithm->distanceThreshold();
-    if (useDistanceRatioThreshold_) {
+    if (useDistanceRatioThreshold_)
+    {
       // When using the distance ratio threshold, we want to build a list of good matches
       // independent of the threshold first and then later threshold on the ratio.
       const_distthres = std::numeric_limits<distance_t>::max();
@@ -203,7 +212,8 @@ void DenseMatcher::doWorkLinearMatching(
 
     size_t sizeA = matchingAlgorithm->sizeA();
     for (size_t shortindexA = start; shortindexA < sizeA; shortindexA +=
-        numMatcherThreads_) {
+        numMatcherThreads_)
+    {
       if (matchingAlgorithm->skipA(shortindexA))
         continue;
 
@@ -237,7 +247,8 @@ void DenseMatcher::doWorkLinearMatching(
 // MatchingAlgorithm->getListBEndIterator().
 template<typename MATCHING_ALGORITHM_T>
 void DenseMatcher::doWorkImageSpaceMatching(
-    MatchJob & my_job, MATCHING_ALGORITHM_T* matchingAlgorithm) {
+    MatchJob & my_job, MATCHING_ALGORITHM_T* matchingAlgorithm)
+{
   OKVIS_ASSERT_TRUE(std::runtime_error, matchingAlgorithm != NULL,
                     "matching algorithm is NULL");
   try {
@@ -247,14 +258,16 @@ void DenseMatcher::doWorkImageSpaceMatching(
     size_t numElementsInListA = matchingAlgorithm->sizeA();
 
     distance_t const_distthres = matchingAlgorithm->distanceThreshold();
-    if (useDistanceRatioThreshold_) {
+    if (useDistanceRatioThreshold_)
+    {
       // When using the distance ratio threshold, we want to build a list of good matches
       // independent of the threshold first and then later threshold on the ratio.
       const_distthres = std::numeric_limits<distance_t>::max();
     }
 
     for (size_t shortindexA = start; shortindexA < matchingAlgorithm->sizeA();
-        shortindexA += numMatcherThreads_) {
+        shortindexA += numMatcherThreads_)
+    {
       if (matchingAlgorithm->skipA(shortindexA))
         continue;
 

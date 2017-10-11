@@ -58,8 +58,9 @@ ceres_options:
 
 # detection
 detection_options:
-    threshold: 8.0      # detection threshold. By default the uniformity radius in pixels
-    matching_threshold: 60.0    # the threshold for the hamming distance between 2 descriptors, more strict for lower value
+    threshold: 10.0      # detection threshold. By default the uniformity radius in pixels
+    matching_threshold: 30.0    # the threshold for the hamming distance between 2 descriptors, more strict for lower value
+    matching_ratio_threshold: 1.5 # the ratio threshold s.t. second/best>threshold will be matched
     octaves: 0           # number of octaves for detection. 0 means single-scale at highest resolution
     maxNoKeypoints: 400  # restrict to a maximum of this many keypoints per image (strongest ones)
 

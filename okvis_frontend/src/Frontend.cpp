@@ -76,10 +76,17 @@ Frontend::Frontend(size_t numCameras)
       briskDescriptionRotationInvariance_(true),
       briskDescriptionScaleInvariance_(false),
       briskMatchingThreshold_(60.0), // default 60.0
+      briskMatchingRatioThreshold_(3.0),
       matcher_(
-          std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(4))), // default 4: 4 matcher threads
+          std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(4, 4, true))), // default 4: 4 matcher threads
       keyframeInsertionOverlapThreshold_(0.8), // default 0.6, larger value make more keyframes
-      keyframeInsertionMatchingRatioThreshold_(0.4) { //default 0.2, larger value make more keyframes
+      keyframeInsertionMatchingRatioThreshold_(0.4),//default 0.2, larger value make more keyframes
+      rotation_only_ratio_(0.9), // default is 0.8, make it larger so easier to initialize
+      ransacinlinersminnumber_(10), // default is 10
+      required3d2dmatches_(5), //default is 5
+      IsOriginalFeatureDetector_(false)
+
+{
 
     // create mutexes for feature detectors and descriptor extractors
   for (size_t i = 0; i < numCameras_; ++i)
@@ -146,7 +153,7 @@ bool Frontend::dataAssociationAndInitialization(
   if (estimator.numFrames() > 1)
   {
 
-    int requiredMatches = 5;
+    //int requiredMatches = 5;
 
     double uncertainMatchFraction = 0;
     bool rotationOnly = false;
@@ -196,7 +203,7 @@ bool Frontend::dataAssociationAndInitialization(
       if (!rotationOnly)
       {
         isInitialized_ = true;
-        LOG(INFO) << "Initialized!!!!!!!!!!!!!";
+        LOG(INFO) << "Initialized!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
 
         //okvis::kinematics::Transformation T_WS;
         //estimator.get_T_WS(framesInOut->id(), T_WS);
@@ -204,8 +211,8 @@ bool Frontend::dataAssociationAndInitialization(
       }
     }
 
-    if (num3dMatches <= requiredMatches) {
-      LOG(WARNING) << "Tracking failure. Number of 3d2d-matches: " << num3dMatches << " <= " << requiredMatches;
+    if (num3dMatches <= required3d2dmatches_) {
+      LOG(WARNING) << "Tracking failure. Number of 3d2d-matches: " << num3dMatches << " <= " << required3d2dmatches_;
     }
 
     // keyframe decision, at the moment only landmarks that match with keyframe are initialised
@@ -422,11 +429,11 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
                                double* uncertainMatchFraction,
                                bool removeOutliers)
 {
-  LOG(INFO) << "matchToKeyframes at frame" << currentFrameId;
+  //LOG(INFO) << "matchToKeyframes at frame" << currentFrameId;
   rotationOnly = true;
   if (estimator.numFrames() < 2) {
     // just starting, so yes, we need this as a new keyframe
-     LOG(INFO) << "estimator.numFrames() < 2, return 0";
+     LOG(INFO) << "estimator.numFrames() < 2, add as a new keyframe, return 0";
     return 0;
   }
 
@@ -446,6 +453,7 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
       MATCHING_ALGORITHM matchingAlgorithm(estimator,
                                            MATCHING_ALGORITHM::Match3D2D,
                                            briskMatchingThreshold_,
+                                           briskMatchingRatioThreshold_,
                                            usePoseUncertainty);
       matchingAlgorithm.setFrames(olderFrameId, currentFrameId, im, im);
 
@@ -474,6 +482,7 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
       MATCHING_ALGORITHM matchingAlgorithm(estimator,
                                            MATCHING_ALGORITHM::Match2D2D,
                                            briskMatchingThreshold_,
+                                           briskMatchingRatioThreshold_,
                                            usePoseUncertainty);
       matchingAlgorithm.setFrames(olderFrameId, currentFrameId, im, im);
 
@@ -526,7 +535,7 @@ int Frontend::matchToLastFrame(okvis::Estimator& estimator,
                                bool usePoseUncertainty,
                                bool removeOutliers)
 {
-  LOG(INFO) << "matchToLastFrame at frame" << currentFrameId;
+  //LOG(INFO) << "matchToLastFrame at frame" << currentFrameId;
   if (estimator.numFrames() < 2) {
     LOG(INFO) << "estimator.numFrames() < 2"  ;
     // just starting, so yes, we need this as a new keyframe
@@ -548,6 +557,7 @@ int Frontend::matchToLastFrame(okvis::Estimator& estimator,
     MATCHING_ALGORITHM matchingAlgorithm(estimator,
                                          MATCHING_ALGORITHM::Match3D2D,
                                          briskMatchingThreshold_,
+                                         briskMatchingRatioThreshold_,
                                          usePoseUncertainty);
     matchingAlgorithm.setFrames(lastFrameId, currentFrameId, im, im);
 
@@ -564,6 +574,7 @@ int Frontend::matchToLastFrame(okvis::Estimator& estimator,
     MATCHING_ALGORITHM matchingAlgorithm(estimator,
                                          MATCHING_ALGORITHM::Match2D2D,
                                          briskMatchingThreshold_,
+                                         briskMatchingRatioThreshold_,
                                          usePoseUncertainty);
     matchingAlgorithm.setFrames(lastFrameId, currentFrameId, im, im);
 
@@ -590,7 +601,7 @@ void Frontend::matchStereo(okvis::Estimator& estimator,
   const size_t camNumber = multiFrame->numFrames();
   const uint64_t mfId = multiFrame->id();
 
-  LOG(INFO) << "Do matchStereo at frame " << mfId;
+  //LOG(INFO) << "Do matchStereo at frame " << mfId;
 
   for (size_t im0 = 0; im0 < camNumber; im0++)
   {
@@ -607,6 +618,7 @@ void Frontend::matchStereo(okvis::Estimator& estimator,
       MATCHING_ALGORITHM matchingAlgorithm(estimator,
                                            MATCHING_ALGORITHM::Match2D2D,
                                            briskMatchingThreshold_,
+                                           briskMatchingRatioThreshold_,
                                            false);  // TODO: make sure this is changed when switching back to uncertainty based matching
       matchingAlgorithm.setFrames(mfId, mfId, im0, im1);  // newest frame
 
@@ -696,7 +708,7 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
   numInliers = ransac.inliers_.size();
   LOG(INFO) <<   "numInliers: " << numInliers;
 
-  if (numInliers >= 10)
+  if (numInliers >= ransacinlinersminnumber_)
   {
 
     // kick out outliers:
@@ -809,13 +821,13 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
 
     // decide on success and fill inliers
     std::vector<bool> inliers(numCorrespondences, false);
-    if (rotation_only_ratio > rel_pose_ratio || rotation_only_ratio > 0.8) // default 0.8
+    if (rotation_only_ratio > rel_pose_ratio || rotation_only_ratio > rotation_only_ratio_) // default 0.8
     {
-      if (rotation_only_inliers > 10) {
+      if (rotation_only_inliers > ransacinlinersminnumber_) {
         rotation_only_success = true;
       }
       rotationOnly = true;
-      LOG(INFO) << "rotation_only_ratio > rel_pose_ratio || rotation_only_ratio > 0.8, rotationOnly = true";
+      LOG(INFO) << "rotation_only_ratio > rel_pose_ratio || rotation_only_ratio > 0.9, rotationOnly = true";
 
       totalInlierNumber += rotation_only_inliers;
       for (size_t k = 0; k < rotation_only_ransac.inliers_.size(); ++k)
@@ -825,7 +837,7 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
     }
     else
     {
-      if (rel_pose_inliers > 10) {
+      if (rel_pose_inliers > ransacinlinersminnumber_) {
         rel_pose_success = true;
         LOG(INFO) << "rel_pose_success = true";
       }
@@ -943,19 +955,25 @@ void Frontend::initialiseBriskFeatureDetectors()
 
   for (size_t i = 0; i < numCameras_; ++i)
   {
-    featureDetectors_.push_back(
-        std::shared_ptr<cv::FeatureDetector>(
+    if(IsOriginalFeatureDetector_)
+    {
+        featureDetectors_.push_back(
+            std::shared_ptr<cv::FeatureDetector>(
+                new brisk::ScaleSpaceFeatureDetector<brisk::HarrisScoreCalculator>(
+                    briskDetectionThreshold_, briskDetectionOctaves_,
+                    briskDetectionAbsoluteThreshold_,
+                    briskDetectionMaximumKeypoints_)));
+    }
+    else
+    {
+        featureDetectors_.push_back(
+            std::shared_ptr<cv::FeatureDetector>(
+                new cv::GridAdaptedFeatureDetector(
+                new cv::FastFeatureDetector(briskDetectionThreshold_),
+                    briskDetectionMaximumKeypoints_, 4, 4 ))); // from config file, except the 7x4...
 
-#ifdef __ARM_NEON__
-            new cv::GridAdaptedFeatureDetector( 
-            new cv::FastFeatureDetector(briskDetectionThreshold_),
-                briskDetectionMaximumKeypoints_, 4, 4 ))); // from config file, except the 7x4...
-#else
-            new brisk::ScaleSpaceFeatureDetector<brisk::HarrisScoreCalculator>(
-                briskDetectionThreshold_, briskDetectionOctaves_,
-                briskDetectionAbsoluteThreshold_,
-                briskDetectionMaximumKeypoints_)));
-#endif
+    }
+
 
     descriptorExtractors_.push_back(
         std::shared_ptr<cv::DescriptorExtractor>(

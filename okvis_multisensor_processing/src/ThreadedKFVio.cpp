@@ -80,9 +80,11 @@ ThreadedKFVio::ThreadedKFVio(okvis::VioParameters& parameters)
       estimator_(),
       frontend_(parameters.nCameraSystem.numCameras()),
       parameters_(parameters),
+      IsImageNormalized_(true),
       maxImuInputQueueSize_(
           2 * max_camera_input_queue_size * parameters.imu.rate
-              / parameters.sensors_information.cameraRate) {
+              / parameters.sensors_information.cameraRate)
+{
   setBlocking(false);
   init();
 }
@@ -98,6 +100,7 @@ void ThreadedKFVio::init()
   frontend_.setBriskDetectionOctaves(parameters_.optimization.detectionOctaves);
   frontend_.setBriskDetectionThreshold(parameters_.optimization.detectionThreshold);
   frontend_.setBriskMatchingThreshold(parameters_.optimization.detectionMatchingThreshold);
+  frontend_.setBriskMatchingRatioThreshold(parameters_.optimization.detectionMatchingRatioThreshold);
   frontend_.setBriskDetectionMaximumKeypoints(parameters_.optimization.maxNoKeypoints);
 
   lastOptimizedStateTimestamp_ = okvis::Time(0.0) + temporal_imu_data_overlap;  // s.t. last_timestamp_ - overlap >= 0 (since okvis::time(-0.02) returns big number)
@@ -193,16 +196,37 @@ ThreadedKFVio::~ThreadedKFVio() {
 #endif
 }
 
+void GammaCorrection(const cv::Mat& src, cv::Mat& dst, float fGamma)
+{
+    unsigned char lut[256];
+    for (int i = 0; i < 256; i++)
+    {
+        lut[i] = cv::saturate_cast<uchar>(pow((float)(i / 255.0), fGamma) * 255.0f);
+    }
+
+    dst = src.clone();
+    const int channels = dst.channels();
+    switch (channels)
+    {
+        cv::MatIterator_<uchar> it, end;
+        for (it = dst.begin<uchar>(), end = dst.end<uchar>(); it != end; it++)
+            *it = lut[(*it)];
+        break;
+    }
+}
+
 // Add a new image.
 bool ThreadedKFVio::addImage(const okvis::Time & stamp, size_t cameraIndex,
                              const cv::Mat & image,
                              const std::vector<cv::KeyPoint> * keypoints,
-                             bool* /*asKeyframe*/) {
+                             bool* /*asKeyframe*/)
+{
   assert(cameraIndex<numCameras_);
 
   if (lastAddedImageTimestamp_ > stamp
       && fabs((lastAddedImageTimestamp_ - stamp).toSec())
-          > parameters_.sensors_information.frameTimestampTolerance) {
+          > parameters_.sensors_information.frameTimestampTolerance)
+  {
     LOG(ERROR)
         << "Received image from the past. Dropping the image.";
     return false;
@@ -211,21 +235,50 @@ bool ThreadedKFVio::addImage(const okvis::Time & stamp, size_t cameraIndex,
 
   std::shared_ptr<okvis::CameraMeasurement> frame = std::make_shared<
       okvis::CameraMeasurement>();
-  frame->measurement.image = image;
+
+  if(!IsImageNormalized_)
+  {
+    frame->measurement.image = image;
+  }
+  else
+  {
+      cv::Mat normalizedImg = cv::Mat(image.size(), image.type());
+
+      //cv::normalize not much use, since the light always make 255 in the image
+      //cv::normalize(image,  normalizedImg, 0, 255, cv::NORM_MINMAX);
+
+      //cv::equalizeHist not work since it invokes dark noise
+      //cv::equalizeHist( image, normalizedImg );
+
+      //Gamma values < 1 will shift the image towards the darker end of the spectrum while
+      //gamma values > 1 will make the image appear lighter.
+      //e.g. gamma=2 equals to out = sqrt(in/255)*255
+      GammaCorrection(image, normalizedImg, 2.5f);
+
+      frame->measurement.image = normalizedImg;
+  }
+
+
   frame->timeStamp = stamp;
   frame->sensorId = cameraIndex;
 
-  if (keypoints != nullptr) {
+  if (keypoints != nullptr)
+  {
     frame->measurement.deliversKeypoints = true;
     frame->measurement.keypoints = *keypoints;
-  } else {
+  }
+  else
+  {
     frame->measurement.deliversKeypoints = false;
   }
 
-  if (blocking_) {
+  if (blocking_)
+  {
     cameraMeasurementsReceived_[cameraIndex]->PushBlockingIfFull(frame, 1);
     return true;
-  } else {
+  }
+  else
+  {
     cameraMeasurementsReceived_[cameraIndex]->PushNonBlockingDroppingIfFull(
         frame, max_camera_input_queue_size);
     return cameraMeasurementsReceived_[cameraIndex]->Size() == 1;
@@ -490,12 +543,12 @@ void ThreadedKFVio::matchingLoop()
   TimerSwitchable processImuTimer("0 processImuMeasurements",true);
 
   clock_t end, begin;
-  long long counter=0;
+  //long long counter=0;
   for (;;)
   {
     //Frame consumer loop content
-      LOG(INFO) << "frameConsumerLoop: " << counter;
-      counter++;
+      //LOG(INFO) << "frameConsumerLoop: " << counter;
+      //counter++;
 
       begin = clock();
       // get data and check for termination request
@@ -617,14 +670,14 @@ void ThreadedKFVio::matchingLoop()
 
 
     end = clock();
-    LOG(INFO) << "Frame consumer loop run in " << (double(end - begin)) / CLOCKS_PER_SEC << "seconds" ;
+    //LOG(INFO) << "Frame consumer loop run in " << (double(end - begin)) / CLOCKS_PER_SEC << "seconds" ;
     //Frame consumer loop content end
 
 
 
 
-    LOG(INFO) << "matchingLoop: " << counter;
-    counter++;
+    //LOG(INFO) << "matchingLoop: " << counter;
+    //counter++;
 
     begin = clock();
     // get new frame
@@ -716,7 +769,7 @@ void ThreadedKFVio::matchingLoop()
 
 
     end = clock();
-    LOG(INFO) << "Matching loop run in " << (double(end - begin)) / CLOCKS_PER_SEC << "seconds" ;
+    //LOG(INFO) << "Matching loop run in " << (double(end - begin)) / CLOCKS_PER_SEC << "seconds" ;
 
     // Imu consumer loop content
 //    LOG(INFO) << "imuConsumerLoop: " << counter;
@@ -780,8 +833,8 @@ void ThreadedKFVio::matchingLoop()
 
     begin = clock();
     //Optimization content
-    LOG(INFO) << "optimizationLoop: " << counter;
-    counter++;
+    //LOG(INFO) << "optimizationLoop: " << counter;
+    //counter++;
     std::shared_ptr<okvis::MultiFrame> frame_pairs;
     VioVisualizer::VisualizationData::Ptr visualizationDataPtr;
     okvis::Time deleteImuMeasurementsUntil(0, 0);
@@ -927,7 +980,7 @@ void ThreadedKFVio::matchingLoop()
 
 
     end = clock();
-    LOG(INFO) << "Optimization loop run in " << (double(end - begin)) / CLOCKS_PER_SEC << "seconds";
+    //LOG(INFO) << "Optimization loop run in " << (double(end - begin)) / CLOCKS_PER_SEC << "seconds";
     //Optimization content end
 
 

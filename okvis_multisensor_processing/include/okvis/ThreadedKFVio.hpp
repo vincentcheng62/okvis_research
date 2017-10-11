@@ -329,6 +329,8 @@ class ThreadedKFVio : public VioInterface {
   /// the state from the lastOptimizedStateTimestamp_.
   std::atomic_bool repropagationNeeded_;
 
+  bool IsImageNormalized_; // is the image process to increase overall brightness?
+
   /// @}
 
   ImuFrameSynchronizer imuFrameSynchronizer_;  ///< The IMU frame synchronizer.

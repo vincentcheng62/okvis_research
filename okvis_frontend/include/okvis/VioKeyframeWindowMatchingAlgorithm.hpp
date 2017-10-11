@@ -79,7 +79,7 @@ class VioKeyframeWindowMatchingAlgorithm : public okvis::MatchingAlgorithm {
    * @param usePoseUncertainty  Use the pose uncertainty for matching.
    */
   VioKeyframeWindowMatchingAlgorithm(okvis::Estimator& estimator,
-                                     int matchingType, float distanceThreshold,
+                                     int matchingType, float distanceThreshold, float distanceRatioThreshold,
                                      bool usePoseUncertainty = true);
 
   virtual ~VioKeyframeWindowMatchingAlgorithm();
@@ -109,6 +109,7 @@ class VioKeyframeWindowMatchingAlgorithm : public okvis::MatchingAlgorithm {
 
   /// \brief Get the distance threshold for which matches exceeding it will not be returned as matches.
   virtual float distanceThreshold() const;
+  virtual float distanceRatioThreshold() const;
   /// \brief Set the distance threshold for which matches exceeding it will not be returned as matches.
   void setDistanceThreshold(float distanceThreshold);
 
@@ -185,6 +186,7 @@ class VioKeyframeWindowMatchingAlgorithm : public okvis::MatchingAlgorithm {
 
   /// Distances above this threshold will not be returned as matches.
   float distanceThreshold_;
+  float distanceRatioThreshold_;
 
   /// \name Store some transformations that are often used
   /// \{

@@ -59,11 +59,12 @@ namespace okvis
 // Constructor.
 template<class CAMERA_GEOMETRY_T>
 VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::VioKeyframeWindowMatchingAlgorithm(
-    okvis::Estimator& estimator, int matchingType, float distanceThreshold,
+    okvis::Estimator& estimator, int matchingType, float distanceThreshold, float distanceRatioThreshold,
     bool usePoseUncertainty)
 {
   matchingType_ = matchingType;
   distanceThreshold_ = distanceThreshold;
+  distanceRatioThreshold_ = distanceRatioThreshold;
   estimator_ = &estimator;
   usePoseUncertainty_ = usePoseUncertainty;
 }
@@ -339,6 +340,12 @@ float VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::distanceThreshold()
   return distanceThreshold_;
 }
 
+// Get the distance ratio threshold for which matches exceeding it will not be returned as matches.
+template<class CAMERA_GEOMETRY_T>
+float VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::distanceRatioThreshold() const {
+  return distanceRatioThreshold_;
+}
+
 // Geometric verification of a match.
 template<class CAMERA_GEOMETRY_T>
 bool VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::verifyMatch(
@@ -416,7 +423,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
   if (matchingType_ == Match2D2D)
   {
 
-    // check that not both are set
+    // check that not both are set (e.g. none of them is landmark already)
     if (lmIdA != 0 && lmIdB != 0) {
       return;
     }
@@ -433,7 +440,8 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
     }
 
     // get the uncertainty
-    if (canBeInitialized) {  // know more exactly
+    if (canBeInitialized)
+    {  // know more exactly
       Eigen::Matrix3d pointUOplus_A;
       probabilisticStereoTriangulator_.getUncertainty(indexA, indexB, hP_Ca,
                                                       pointUOplus_A,
@@ -443,15 +451,15 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
     // check and adapt landmark status
     bool insertA = lmIdA == 0;
     bool insertB = lmIdB == 0;
-    bool insertHomogeneousPointParameterBlock = false;
+    bool insertHomogeneousPointParameterBlock = false; // it determines whether a keypoint will be added to landmark
     uint64_t lmId = 0;  // 0 just to avoid warning
 
     if (insertA && insertB)
     {
       // ok, we need to assign a new Id...
       lmId = okvis::IdProvider::instance().newId();
-      frameA_->setLandmarkId(camIdA_, indexA, lmId);
-      frameB_->setLandmarkId(camIdB_, indexB, lmId);
+      frameA_->setLandmarkId(camIdA_, indexA, lmId); // since they are looking at physically same landmark
+      frameB_->setLandmarkId(camIdB_, indexB, lmId); // since they are looking at physically same landmark
       lmIdA = lmId;
       lmIdB = lmId;
       // and add it to the graph
@@ -477,6 +485,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
         }
       }
     }
+
     // add landmark to graph if necessary
     if (insertHomogeneousPointParameterBlock)
     {

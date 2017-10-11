@@ -247,6 +247,12 @@ class Frontend : public VioFrontendInterface {
     initialiseBriskFeatureDetectors();
   }
 
+  /// @brief Set the matching threshold.
+  void setBriskMatchingRatioThreshold(double threshold) {
+    briskMatchingRatioThreshold_ = threshold;
+    initialiseBriskFeatureDetectors();
+  }
+
   /// @brief Set the area overlap threshold under which a new keyframe is inserted.
   void setKeyframeInsertionOverlapThreshold(float threshold) {
     keyframeInsertionOverlapThreshold_ = threshold;
@@ -260,6 +266,11 @@ class Frontend : public VioFrontendInterface {
   /// @}
 
  private:
+
+  double rotation_only_ratio_; ///< the threshold ratio for rotation only ransac such that beyond that will think it is orientation only
+  size_t ransacinlinersminnumber_;   ///< the inliner threshold for
+  size_t required3d2dmatches_;
+  bool IsOriginalFeatureDetector_;
 
   /**
    * @brief   feature detectors with the current settings.
@@ -299,6 +310,7 @@ class Frontend : public VioFrontendInterface {
   ///@{
 
   double briskMatchingThreshold_; ///< The set BRISK matching threshold.
+  double briskMatchingRatioThreshold_;///< The set BRISK matching ratio threshold.
 
   ///@}
 
