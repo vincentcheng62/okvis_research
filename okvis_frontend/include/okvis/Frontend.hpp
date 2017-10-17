@@ -247,6 +247,10 @@ class Frontend : public VioFrontendInterface {
     initialiseBriskFeatureDetectors();
   }
 
+  void setRotation_only_ratio_(double threshold){
+      rotation_only_ratio_ = threshold;
+  }
+
   void setIsOriginalFeatureDetector(bool value) {
     IsOriginalFeatureDetector_ = value;
     initialiseBriskFeatureDetectors();

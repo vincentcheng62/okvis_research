@@ -72,7 +72,8 @@ void SpeedAndBiasParameterBlock::setEstimate(const SpeedAndBias& speedAndBias) {
 
 // getters
 // Get estimate.
-SpeedAndBias SpeedAndBiasParameterBlock::estimate() const {
+SpeedAndBias SpeedAndBiasParameterBlock::estimate() const
+{
   SpeedAndBias speedAndBias;
   for (int i = 0; i < base_t::Dimension; ++i)
     speedAndBias[i] = parameters_[i];

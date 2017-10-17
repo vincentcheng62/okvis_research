@@ -106,7 +106,7 @@ void Estimator::clearImus(){
   imuParametersVec_.clear();
 }
 
-// Add a pose to the state.
+// Add a pose to the state, add before matching.
 bool Estimator::addStates(
     okvis::MultiFramePtr multiFrame,
     const okvis::ImuMeasurementDeque & imuMeasurements,
@@ -116,35 +116,43 @@ bool Estimator::addStates(
   // TODO !!
   okvis::kinematics::Transformation T_WS;
   okvis::SpeedAndBias speedAndBias;
-  if (statesMap_.empty()) {
+
+  if (statesMap_.empty()) // statesMap_ is a buffer for currently considered states.(key=poseId)
+  {
     // in case this is the first frame ever, let's initialize the pose:
     bool success0 = initPoseFromImu(imuMeasurements, T_WS);
     OKVIS_ASSERT_TRUE_DBG(Exception, success0,
         "pose could not be initialized from imu measurements.");
     if (!success0)
+    {
+        LOG(INFO) << "pose could not be initialized from imu measurements.";
       return false;
+    }
     speedAndBias.setZero();
     speedAndBias.segment<3>(6) = imuParametersVec_.at(0).a0;
-  } else {
+  }
+  else
+  {
     // get the previous states
     uint64_t T_WS_id = statesMap_.rbegin()->second.id;
     uint64_t speedAndBias_id = statesMap_.rbegin()->second.sensors.at(SensorStates::Imu)
         .at(0).at(ImuSensorStates::SpeedAndBias).id;
     OKVIS_ASSERT_TRUE_DBG(Exception, mapPtr_->parameterBlockExists(T_WS_id),
                        "this is an okvis bug. previous pose does not exist.");
+
     T_WS = std::static_pointer_cast<ceres::PoseParameterBlock>(
-        mapPtr_->parameterBlockPtr(T_WS_id))->estimate();
+        mapPtr_->parameterBlockPtr(T_WS_id))->estimate(); // estimate(): just get back the T_WS from parameters_[i] struct
     //OKVIS_ASSERT_TRUE_DBG(
     //    Exception, speedAndBias_id,
     //    "this is an okvis bug. previous speedAndBias does not exist.");
-    speedAndBias =
-        std::static_pointer_cast<ceres::SpeedAndBiasParameterBlock>(
-            mapPtr_->parameterBlockPtr(speedAndBias_id))->estimate();
+    speedAndBias = std::static_pointer_cast<ceres::SpeedAndBiasParameterBlock>(
+            mapPtr_->parameterBlockPtr(speedAndBias_id))->estimate(); // estimate(): just get back the speedAndBias from parameters_[i] struct
 
     // propagate pose and speedAndBias
     int numUsedImuMeasurements = ceres::ImuError::propagation(
         imuMeasurements, imuParametersVec_.at(0), T_WS, speedAndBias,
         statesMap_.rbegin()->second.timestamp, multiFrame->timestamp());
+
     OKVIS_ASSERT_TRUE_DBG(Exception, numUsedImuMeasurements > 1,
                        "propagation failed");
     if (numUsedImuMeasurements < 1){
@@ -172,13 +180,10 @@ bool Estimator::addStates(
   if(statesMap_.empty())
   {
     referencePoseId_ = states.id; // set this as reference pose
-    if (!mapPtr_->addParameterBlock(poseParameterBlock,ceres::Map::Pose6d)) {
-      return false;
-    }
-  } else {
-    if (!mapPtr_->addParameterBlock(poseParameterBlock,ceres::Map::Pose6d)) {
-      return false;
-    }
+  }
+
+  if (!mapPtr_->addParameterBlock(poseParameterBlock,ceres::Map::Pose6d)) {
+    return false;
   }
 
   // add to buffer
@@ -191,18 +196,21 @@ bool Estimator::addStates(
 
   // initialize new sensor states
   // cameras:
-  for (size_t i = 0; i < extrinsicsEstimationParametersVec_.size(); ++i) {
-
+  for (size_t i = 0; i < extrinsicsEstimationParametersVec_.size(); ++i)
+  {
     SpecificSensorStatesContainer cameraInfos(2);
     cameraInfos.at(CameraSensorStates::T_SCi).exists=true;
     cameraInfos.at(CameraSensorStates::Intrinsics).exists=false;
     if(((extrinsicsEstimationParametersVec_.at(i).sigma_c_relative_translation<1e-12)||
         (extrinsicsEstimationParametersVec_.at(i).sigma_c_relative_orientation<1e-12))&&
-        (statesMap_.size() > 1)){
+        (statesMap_.size() > 1))
+    {
       // use the same block...
       cameraInfos.at(CameraSensorStates::T_SCi).id =
           lastElementIterator->second.sensors.at(SensorStates::Camera).at(i).at(CameraSensorStates::T_SCi).id;
-    } else {
+    }
+    else
+    {
       const okvis::kinematics::Transformation T_SC = *multiFrame->T_SC(i);
       uint64_t id = IdProvider::instance().newId();
       std::shared_ptr<okvis::ceres::PoseParameterBlock> extrinsicsParameterBlockPtr(
@@ -219,7 +227,8 @@ bool Estimator::addStates(
   }
 
   // IMU states are automatically propagated.
-  for (size_t i=0; i<imuParametersVec_.size(); ++i){
+  for (size_t i=0; i<imuParametersVec_.size(); ++i)
+  {
     SpecificSensorStatesContainer imuInfo(2);
     imuInfo.at(ImuSensorStates::SpeedAndBias).exists = true;
     uint64_t id = IdProvider::instance().newId();
@@ -234,8 +243,10 @@ bool Estimator::addStates(
     states.sensors.at(SensorStates::Imu).push_back(imuInfo);
   }
 
-  // depending on whether or not this is the very beginning, we will add priors or relative terms to the last state:
-  if (statesMap_.size() == 1) {
+  // depending on whether or not this is the very beginning,
+  // we will add priors or relative terms to the last state:
+  if (statesMap_.size() == 1)
+  {
     // let's add a prior
     Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Zero();
     information(5,5) = 1.0e8; information(0,0) = 1.0e8; information(1,1) = 1.0e8; information(2,2) = 1.0e8;
@@ -244,12 +255,15 @@ bool Estimator::addStates(
     //mapPtr_->isJacobianCorrect(id2,1.0e-6);
 
     // sensor states
-    for (size_t i = 0; i < extrinsicsEstimationParametersVec_.size(); ++i) {
+    for (size_t i = 0; i < extrinsicsEstimationParametersVec_.size(); ++i)
+    {
       double translationStdev = extrinsicsEstimationParametersVec_.at(i).sigma_absolute_translation;
       double translationVariance = translationStdev*translationStdev;
       double rotationStdev = extrinsicsEstimationParametersVec_.at(i).sigma_absolute_orientation;
       double rotationVariance = rotationStdev*rotationStdev;
-      if(translationVariance>1.0e-16 && rotationVariance>1.0e-16){
+
+      if(translationVariance>1.0e-16 && rotationVariance>1.0e-16)
+      {
         const okvis::kinematics::Transformation T_SC = *multiFrame->T_SC(i);
         std::shared_ptr<ceres::PoseError > cameraPoseError(
               new ceres::PoseError(T_SC, translationVariance, rotationVariance));
@@ -261,12 +275,14 @@ bool Estimator::addStates(
                 states.sensors.at(SensorStates::Camera).at(i).at(CameraSensorStates::T_SCi).id));
         //mapPtr_->isJacobianCorrect(id,1.0e-6);
       }
-      else {
+      else
+      {
         mapPtr_->setParameterBlockConstant(
             states.sensors.at(SensorStates::Camera).at(i).at(CameraSensorStates::T_SCi).id);
       }
     }
-    for (size_t i = 0; i < imuParametersVec_.size(); ++i) {
+    for (size_t i = 0; i < imuParametersVec_.size(); ++i)
+    {
       Eigen::Matrix<double,6,1> variances;
       // get these from parameter file
       const double sigma_bg = imuParametersVec_.at(0).sigma_bg;
@@ -283,9 +299,11 @@ bool Estimator::addStates(
       //mapPtr_->isJacobianCorrect(id,1.0e-6);
     }
   }
-  else{
+  else
+  {
     // add IMU error terms
-    for (size_t i = 0; i < imuParametersVec_.size(); ++i) {
+    for (size_t i = 0; i < imuParametersVec_.size(); ++i)
+    {
       std::shared_ptr<ceres::ImuError> imuError(
           new ceres::ImuError(imuMeasurements, imuParametersVec_.at(i),
                               lastElementIterator->second.timestamp,
@@ -307,9 +325,11 @@ bool Estimator::addStates(
     }
 
     // add relative sensor state errors
-    for (size_t i = 0; i < extrinsicsEstimationParametersVec_.size(); ++i) {
+    for (size_t i = 0; i < extrinsicsEstimationParametersVec_.size(); ++i)
+    {
       if(lastElementIterator->second.sensors.at(SensorStates::Camera).at(i).at(CameraSensorStates::T_SCi).id !=
-          states.sensors.at(SensorStates::Camera).at(i).at(CameraSensorStates::T_SCi).id){
+          states.sensors.at(SensorStates::Camera).at(i).at(CameraSensorStates::T_SCi).id)
+      {
         // i.e. they are different estimated variables, so link them with a temporal error term
         double dt = (states.timestamp - lastElementIterator->second.timestamp)
             .toSec();
@@ -474,8 +494,10 @@ bool Estimator::applyMarginalizationStrategy(
   std::vector<uint64_t> removeAllButPose;
   std::vector<uint64_t> allLinearizedFrames;
   size_t countedKeyframes = 0;
-  while (rit != statesMap_.rend()) {
-    if (!rit->second.isKeyframe || countedKeyframes >= numKeyframes) {
+  while (rit != statesMap_.rend())
+  {
+    if (!rit->second.isKeyframe || countedKeyframes >= numKeyframes)
+    {
       removeFrames.push_back(rit->second.id);
     } else {
       countedKeyframes++;
@@ -486,9 +508,11 @@ bool Estimator::applyMarginalizationStrategy(
   }
 
   // marginalize everything but pose:
-  for(size_t k = 0; k<removeAllButPose.size(); ++k){
+  for(size_t k = 0; k<removeAllButPose.size(); ++k)
+  {
     std::map<uint64_t, States>::iterator it = statesMap_.find(removeAllButPose[k]);
-    for (size_t i = 0; i < it->second.global.size(); ++i) {
+    for (size_t i = 0; i < it->second.global.size(); ++i)
+    {
       if (i == GlobalStates::T_WS) {
         continue; // we do not remove the pose here.
       }

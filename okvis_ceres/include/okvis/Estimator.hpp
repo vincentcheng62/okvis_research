@@ -545,6 +545,7 @@ class Estimator : public VioBackendInterface
     States() : isKeyframe(false), id(0) {}
     States(bool isKeyframe, uint64_t id, okvis::Time timestamp)
       : isKeyframe(isKeyframe), id(id), timestamp(timestamp) {}
+
     GlobalStatesContainer global;
     AllSensorStatesContainer sensors;
     bool isKeyframe;

@@ -39,6 +39,7 @@
  */
 
 #include <map>
+#include <set>
 
 /// \brief okvis Main namespace of this package.
 namespace okvis {
@@ -101,6 +102,7 @@ void DenseMatcher::matchBody(
   const distance_t& const_distratiothres = matchingAlgorithm.distanceRatioThreshold();
   const distance_t& const_distthres = matchingAlgorithm.distanceThreshold();
 
+  std::set<uint64_t> myset;
   // i is the indexB
   for (size_t i = 0; i < vpairs.size(); ++i)
   {
@@ -121,8 +123,12 @@ void DenseMatcher::matchBody(
             if (best_match_distance == 0 ||
                     second_best_match_distance / best_match_distance > const_distratiothres)
             {
-              matchingAlgorithm.setBestMatch(vpairs[i].indexA, i,
-                                             vpairs[i].distance);
+              matchingAlgorithm.setBestMatch(vpairs[i].indexA, i, vpairs[i].distance);
+//              if(myset.find(vpairs[i].indexA)!=myset.end())
+//              {
+//                 LOG(INFO) << "vpairs[i].indexA got repeated!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
+//              }
+//              myset.insert(vpairs[i].indexA);
             }
           }
 
@@ -131,6 +137,11 @@ void DenseMatcher::matchBody(
           {
             // If there is only one matching feature, we assign it.
             matchingAlgorithm.setBestMatch(vpairs[i].indexA, i, vpairs[i].distance);
+//            if(myset.find(vpairs[i].indexA)!=myset.end())
+//            {
+//               LOG(INFO) << "vpairs[i].indexA got repeated!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
+//            }
+//            myset.insert(vpairs[i].indexA);
           }
       }
 
@@ -140,7 +151,14 @@ void DenseMatcher::matchBody(
     else if (vpairs[i].distance < const_distthres)
     {
       matchingAlgorithm.setBestMatch(vpairs[i].indexA, i, vpairs[i].distance);
+//      if(myset.find(vpairs[i].indexA)!=myset.end())
+//      {
+//         LOG(INFO) << "vpairs[i].indexA got repeated!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
+//      }
+//      myset.insert(vpairs[i].indexA);
     }
+
+
   }
 
   delete[] locks;

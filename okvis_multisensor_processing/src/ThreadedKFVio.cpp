@@ -103,6 +103,7 @@ void ThreadedKFVio::init()
   frontend_.setBriskMatchingRatioThreshold(parameters_.optimization.detectionMatchingRatioThreshold);
   frontend_.setBriskDetectionMaximumKeypoints(parameters_.optimization.maxNoKeypoints);
   frontend_.setIsOriginalFeatureDetector(parameters_.optimization.IsOriginalFeatureDetector);
+  frontend_.setRotation_only_ratio_(parameters_.optimization.rotationOnlyThreshold);
 
   lastOptimizedStateTimestamp_ = okvis::Time(0.0) + temporal_imu_data_overlap;  // s.t. last_timestamp_ - overlap >= 0 (since okvis::time(-0.02) returns big number)
   lastAddedStateTimestamp_ = okvis::Time(0.0) + temporal_imu_data_overlap;  // s.t. last_timestamp_ - overlap >= 0 (since okvis::time(-0.02) returns big number)
@@ -724,8 +725,7 @@ void ThreadedKFVio::matchingLoop()
         imuDataEndTime < imuMeasurements_.back().timeStamp,
         "Waiting for up to date imu data seems to have failed!");
 
-    imuData = getImuMeasurments(imuDataBeginTime,
-                                                           imuDataEndTime);
+    imuData = getImuMeasurments(imuDataBeginTime, imuDataEndTime);
 
     prepareToAddStateTimer.stop();
     // if imu_data is empty, either end_time > begin_time or
@@ -748,7 +748,7 @@ void ThreadedKFVio::matchingLoop()
       okvis::Time t0Matching = okvis::Time::now();
       bool asKeyframe = false;
 
-      if (estimator_.addStates(frame, imuData, asKeyframe))
+      if (estimator_.addStates(frame, imuData, asKeyframe)) // fill in statesMap_ and mapPtr_, which is used by the solver
       {
         lastAddedStateTimestamp_ = frame->timestamp();
         addStateTimer.stop();
@@ -767,13 +767,18 @@ void ThreadedKFVio::matchingLoop()
 
       Eigen::Vector3d ea = T_WS.C().eulerAngles(0, 1, 2);
       LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << ea[0] << ", " << ea[1] << ", " << ea[2] ;
+
+
       matchingTimer.start();
-      frontend_.dataAssociationAndInitialization(estimator_, T_WS, parameters_,
+      //Used the newly proprogated T_WS for matching...
+      frontend_.dataAssociationAndInitialization(estimator_, T_WS, parameters_, // Matching as well as initialization of landmarks and state.
                                                  map_, frame, &asKeyframe);
       matchingTimer.stop();
+
       if (asKeyframe)
         estimator_.setKeyframe(frame->id(), asKeyframe);
-      if(!blocking_) {
+      if(!blocking_)
+      {
         double timeLimit = parameters_.optimization.timeLimitForMatchingAndOptimization
                            -(okvis::Time::now()-t0Matching).toSec();
         estimator_.setOptimizationTimeLimit(std::max<double>(0.0, timeLimit),

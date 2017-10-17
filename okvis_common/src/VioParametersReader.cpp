@@ -173,6 +173,14 @@ void VioParametersReader::readConfigFile(const std::string& filename) {
       "'detection matching ratio threshold' parameter missing in configuration file.");
   file["detection_options"]["matching_ratio_threshold"] >> vioParameters_.optimization.detectionMatchingRatioThreshold;
 
+  // ransac2d2d rotation only threshold
+  success = file["detection_options"]["rotation_only_threshold"].isReal();
+  OKVIS_ASSERT_TRUE(
+      Exception, success,
+      "'detection rotation only threshold' parameter missing in configuration file.");
+  file["detection_options"]["rotation_only_threshold"] >> vioParameters_.optimization.rotationOnlyThreshold;
+
+
   // detection octaves
   success = file["detection_options"]["octaves"].isInt();
   OKVIS_ASSERT_TRUE(

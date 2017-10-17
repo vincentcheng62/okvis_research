@@ -52,19 +52,20 @@ numImuFrames: 3 # number of frames linked by most recent nonlinear IMU error ter
 
 # ceres optimization options
 ceres_options:
-    minIterations: 3   # minimum number of iterations always performed
-    maxIterations: 15  # never do more than these, even if not converged
+    minIterations: 5   # minimum number of iterations always performed
+    maxIterations: 20  # never do more than these, even if not converged
     timeLimit: -1   # [s] negative values will set the an unlimited time limit
-    isverbose: true # whether output all ceres optimization details
+    isverbose: false # whether output all ceres optimization details
 
 # detection
 detection_options:
-    threshold: 8.0      # detection threshold. By default the uniformity radius in pixels
-    matching_threshold: 30.0    # the threshold for the hamming distance between 2 descriptors, more strict for lower value
+    threshold: 10.0      # detection threshold. By default the uniformity radius in pixels
+    matching_threshold: 40.0    # the threshold for the hamming distance between 2 descriptors, more strict for lower value
     matching_ratio_threshold: 1.5 # the ratio threshold s.t. second/best>threshold will be matched
-    octaves: 2           # number of octaves for detection. 0 means single-scale at highest resolution
+    octaves: 3           # number of octaves for detection. 0 means single-scale at highest resolution
     maxNoKeypoints: 400  # restrict to a maximum of this many keypoints per image (strongest ones)
-    IsHarris: true        # is using Fast or sse Harris corner detector (the original)
+    IsHarris: false        # is using Fast or sse Harris corner detector (the original)
+    rotation_only_threshold: 0.92   # default is 0.8, higher will make initialization easier but have a higher chance of orientation initialization only
 
 # delay of images [s]:
 imageDelay: 0.00692948365106  # in case you are using a custom setup, you will have to calibrate this. 0 for the VISensor.

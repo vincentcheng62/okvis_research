@@ -412,6 +412,7 @@ size_t VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::numUncertainMatche
 
 // At the end of the matching step, this function is called once
 // for each pair of matches discovered.
+// B represents current frames
 template<class CAMERA_GEOMETRY_T>
 void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
     size_t indexA, size_t indexB, double /*distance*/)
@@ -466,7 +467,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
       // and add it to the graph
       insertHomogeneousPointParameterBlock = true;
     }
-    else
+    else // never go into it???? otherwise already return at line430
     {
       if (!insertA)
       {
@@ -551,7 +552,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
   {
     OKVIS_ASSERT_TRUE_DBG(Exception,lmIdB==0,"bug. Id in frame B already set.");
 
-    // get projection into B
+    // get projection into B, the current frame
     Eigen::Vector2d kptB = projectionsIntoB_.row(indexA);
     Eigen::Vector2d keypointBMeasurement;
     frameB_->getKeypoint(camIdB_, indexB, keypointBMeasurement);
@@ -560,6 +561,8 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
     double keypointBStdDev;
     frameB_->getKeypointSize(camIdB_, indexB, keypointBStdDev);
     keypointBStdDev = 0.8 * keypointBStdDev / 12.0;
+
+    //Calculate the 2x2 covariance matrix using keyptB scale as stdDev
     Eigen::Matrix2d U_tot = Eigen::Matrix2d::Identity() * keypointBStdDev
         * keypointBStdDev
         + projectionsIntoBUncertainties_.block<2, 2>(2 * indexA, 0);
@@ -584,7 +587,9 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
     // initialize in graph
     if (landmark.observations.find(
         okvis::KeypointIdentifier(mfIdB_, camIdB_, indexB))
-        == landmark.observations.end()) {  // ensure no double observations...
+        == landmark.observations.end())
+    {
+      // ensure no double observations...
       OKVIS_ASSERT_TRUE(Exception, estimator_->isLandmarkAdded(lmIdB),
                         "not added");
       estimator_->addObservation<camera_geometry_t>(lmIdB, mfIdB_, camIdB_,

@@ -62,6 +62,8 @@
 #include <opengv/sac_problems/relative_pose/FrameRelativePoseSacProblem.hpp>
 #include <opengv/sac_problems/relative_pose/FrameRotationOnlySacProblem.hpp>
 
+#include <set>
+
 /// \brief okvis Main namespace of this package.
 namespace okvis {
 
@@ -163,6 +165,7 @@ bool Frontend::dataAssociationAndInitialization(
     bool rotationOnly = false;
 
     // match to last keyframe
+    // matchToKeyframes() is just a special case of matchToLastFrame(), where last frame is a key frame
     TimerSwitchable matchKeyframesTimer("2.4.1 matchToKeyframes");
     switch (distortionType)
     {
@@ -334,7 +337,8 @@ bool Frontend::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
 // Decision whether a new frame should be keyframe or not.
 bool Frontend::doWeNeedANewKeyframe(
     const okvis::Estimator& estimator,
-    std::shared_ptr<okvis::MultiFrame> currentFrame) {
+    std::shared_ptr<okvis::MultiFrame> currentFrame)
+{
 
   if (estimator.numFrames() < 2) {
     // just starting, so yes, we need this as a new keyframe
@@ -350,8 +354,9 @@ bool Frontend::doWeNeedANewKeyframe(
   double overlap = 0.0;
   double ratio = 0.0;
 
-  // go through all the frames and try to match the initialized keypoints
-  for (size_t im = 0; im < currentFrame->numFrames(); ++im) {
+  // go through all the multi-frames and try to match the initialized keypoints
+  for (size_t im = 0; im < currentFrame->numFrames(); ++im)
+  {
 
     // get the hull of all keypoints in current frame
     std::vector<cv::Point2f> frameBPoints, frameBHull;
@@ -393,24 +398,22 @@ bool Frontend::doWeNeedANewKeyframe(
     {
       for (size_t k = 0; k < frameBPoints.size(); ++k)
       {
-        if (cv::pointPolygonTest(frameBMatchesHull, frameBPoints[k], false)
-            > 0) {
+        if (cv::pointPolygonTest(frameBMatchesHull, frameBPoints[k], false)> 0) { // +ve means inside the contour
           pointsInFrameBMatchesArea++;
         }
       }
     }
 
-    double matchingRatio = double(frameBMatches.size())
-        / double(pointsInFrameBMatchesArea);
+    double matchingRatio = double(frameBMatches.size()) / double(pointsInFrameBMatchesArea);
 
-    // calculate overlap score
+    // calculate overlap score, take the max. among all multi-frames
     overlap = std::max(overlapArea, overlap);
     ratio = std::max(matchingRatio, ratio);
   }
 
   // take a decision
-  // overlap: hull of projected and matched landmark area v.s. image area
-  // ratio: matched v.s. detected keypoints ratio
+  // overlap: hull of projected and matched keypoint area v.s. hull of projected keypoint area
+  // ratio: matched keypt num / #of keypt inside hull of matched keypt area
   LOG(INFO) << "overlap: " << overlap << ", ratio: " << ratio ;
   if (overlap > keyframeInsertionOverlapThreshold_
       && ratio > keyframeInsertionMatchingRatioThreshold_)
@@ -446,7 +449,7 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
   int retCtr = 0;
   int numUncertainMatches = 0;
 
-  // go through all the frames and try to match the initialized keypoints
+  // go through all the past 3 keyframes and try to match the initialized keypoints
   size_t kfcounter = 0;
   for (size_t age = 1; age < estimator.numFrames(); ++age)
   {
@@ -475,6 +478,7 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
       break;
   }
 
+  // Do the same thing again with Match2D2D
   kfcounter = 0;
   bool firstFrame = true;
   for (size_t age = 1; age < estimator.numFrames(); ++age)
@@ -498,18 +502,22 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
       numUncertainMatches += matchingAlgorithm.numUncertainMatches();
     }
 
-    // remove outliers
-    // only do RANSAC 3D2D with most recent KF
-    if (kfcounter == 0 && isInitialized_)
-      runRansac3d2d(estimator, params.nCameraSystem,
-                    estimator.multiFrame(currentFrameId), removeOutliers);
-
     bool rotationOnly_tmp = false;
-    // do RANSAC 2D2D for initialization only
-    if (!isInitialized_) {
-      runRansac2d2d(estimator, params, currentFrameId, olderFrameId, true,
-                    removeOutliers, rotationOnly_tmp);
+    if (isInitialized_)
+    {
+        // remove outliers
+        // only do RANSAC 3D2D with most recent KF
+        if (kfcounter == 0)
+          runRansac3d2d(estimator, params.nCameraSystem,
+                        estimator.multiFrame(currentFrameId), removeOutliers);
     }
+    else
+    {
+        // do RANSAC 2D2D for initialization only
+        runRansac2d2d(estimator, params, currentFrameId, olderFrameId, true,
+                      removeOutliers, rotationOnly_tmp);
+    }
+
 
     if (firstFrame) {
       rotationOnly = rotationOnly_tmp;
@@ -551,7 +559,7 @@ int Frontend::matchToLastFrame(okvis::Estimator& estimator,
   uint64_t lastFrameId = estimator.frameIdByAge(1);
 
   if (estimator.isKeyframe(lastFrameId)) {
-      LOG(INFO) << "estimator.isKeyframe(lastFrameId), already done"  ;
+      LOG(INFO) << "estimator.isKeyframe(lastFrameId), already done in matchToKeyframes()"  ;
     // already done
     return 0;
   }
@@ -589,7 +597,7 @@ int Frontend::matchToLastFrame(okvis::Estimator& estimator,
     retCtr += matchingAlgorithm.numMatches();
   }
 
-  // remove outliers
+  // remove outliers only, not to initialize pose
   bool rotationOnly = false;
   if (!isInitialized_)
     runRansac2d2d(estimator, params, currentFrameId, lastFrameId, false,
@@ -602,7 +610,8 @@ int Frontend::matchToLastFrame(okvis::Estimator& estimator,
 // Match the frames inside the multiframe to each other to initialise new landmarks.
 template<class MATCHING_ALGORITHM>
 void Frontend::matchStereo(okvis::Estimator& estimator,
-                           std::shared_ptr<okvis::MultiFrame> multiFrame) {
+                           std::shared_ptr<okvis::MultiFrame> multiFrame)
+{
 
   const size_t camNumber = multiFrame->numFrames();
   const uint64_t mfId = multiFrame->id();
@@ -647,13 +656,53 @@ void Frontend::matchStereo(okvis::Estimator& estimator,
 
   // TODO: no RANSAC ?
 
+
   for (size_t im = 0; im < camNumber; im++)
   {
     const size_t ksize = multiFrame->numKeypoints(im);
+    std::set<uint64_t> myset;
+    std::set<uint64_t> repeat_lm_set;
+
+    //First, check if any two keypt correspond to the same landmark, if so, add it to repeat_lm_set
+    for (size_t k = 0; k < ksize; ++k)
+    {
+      uint64_t lmid = multiFrame->landmarkId(im, k);
+      if ( lmid != 0)
+      {
+        if(myset.find(lmid)!=myset.end())
+        {
+           //LOG(INFO) << "multiFrame->landmarkId(im, k) got repeated!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
+           repeat_lm_set.insert(lmid);
+        }
+        myset.insert(lmid);
+      }
+    }
+
 
     for (size_t k = 0; k < ksize; ++k)
     {
-      if (multiFrame->landmarkId(im, k) != 0) {
+      uint64_t lmid = multiFrame->landmarkId(im, k);
+      bool isRepeat = (repeat_lm_set.find(lmid)!=repeat_lm_set.end());
+      if (lmid != 0)
+      {
+//        Eigen::Vector2d keypt;
+//        multiFrame->getKeypoint(im, k, keypt);
+//        MapPoint landmark;
+//        estimator.getLandmark(mult=iFrame->landmarkId(im, k), landmark);
+//        LOG(INFO) << "KeyPoint: " << keypt.transpose();
+//        LOG(INFO) << "Landmark, id: " << landmark.id << " pos: " << landmark.point.transpose();
+
+//        if(myset.find(multiFrame->landmarkId(im, k))!=myset.end())
+//        {
+//           LOG(INFO) << "multiFrame->landmarkId(im, k) got repeated!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
+//        }
+//        myset.insert(multiFrame->landmarkId(im, k));
+
+        if(isRepeat)
+        {
+            multiFrame->setLandmarkId(im, k, 0);
+        }
+
         continue;  // already identified correspondence
       }
       multiFrame->setLandmarkId(im, k, okvis::IdProvider::instance().newId());
@@ -664,6 +713,7 @@ void Frontend::matchStereo(okvis::Estimator& estimator,
 }
 
 // Perform 3D/2D RANSAC.
+// Used to ensure min. number of inliers and kick-out outlier (i.e. set the keypt landmarkID to 0)
 int Frontend::runRansac3d2d(okvis::Estimator& estimator,
                             const okvis::cameras::NCameraSystem& nCameraSystem,
                             std::shared_ptr<okvis::MultiFrame> currentFrame,
@@ -744,10 +794,16 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
     }
 
   }
+  else
+  {
+      LOG(INFO) << "numInliers < ransacinlinersminnumber_, dont kick-out outliers";
+  }
   return numInliers;
 }
 
 // Perform 2D/2D RANSAC.
+// Perform rotation only sac and relative pose sac to see if relative pose result outweighs rotation only sac
+// the model_coefficients_ after ransac is used for pose initialization
 int Frontend::runRansac2d2d(okvis::Estimator& estimator,
                             const okvis::VioParameters& params,
                             uint64_t currentFrameId, uint64_t olderFrameId,
@@ -779,7 +835,7 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
 
     if (numCorrespondences < 10)
     {
-      LOG(INFO) << "numCorrespondences: " << numCorrespondences << " < 10";
+      LOG(INFO) << "numCorrespondences: " << numCorrespondences << " < 10, exit ransac2d2d";
       continue;  // won't generate meaningful results. let's hope the few correspondences we have are all inliers!!
     }
     // try both the rotation-only RANSAC and the relative one:
@@ -798,8 +854,7 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
 
     // get quality
     int rotation_only_inliers = rotation_only_ransac.inliers_.size();
-    float rotation_only_ratio = float(rotation_only_inliers)
-        / float(numCorrespondences);
+    float rotation_only_ratio = float(rotation_only_inliers) / float(numCorrespondences);
 
     LOG(INFO) << "rotation_only_inliers: " << rotation_only_inliers;
     LOG(INFO) << "rotation_only_ratio: " << rotation_only_ratio;
@@ -829,11 +884,13 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
     std::vector<bool> inliers(numCorrespondences, false);
     if (rotation_only_ratio > rel_pose_ratio || rotation_only_ratio > rotation_only_ratio_) // default 0.8
     {
+      LOG(INFO) << "rotation_only_ratio > rel_pose_ratio || rotation_only_ratio > 0.9, rotationOnly = true";
       if (rotation_only_inliers > ransacinlinersminnumber_) {
         rotation_only_success = true;
+        LOG(INFO) << "rotation_only_success = true";
       }
       rotationOnly = true;
-      LOG(INFO) << "rotation_only_ratio > rel_pose_ratio || rotation_only_ratio > 0.9, rotationOnly = true";
+
 
       totalInlierNumber += rotation_only_inliers;
       for (size_t k = 0; k < rotation_only_ransac.inliers_.size(); ++k)
@@ -857,20 +914,17 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
 
     // failure?
     if (!rotation_only_success && !rel_pose_success) {
-      LOG(INFO) << "!rotation_only_success && !rel_pose_success";
+      LOG(INFO) << "!rotation_only_success && !rel_pose_success, both not success, !fail! exit ransac2d2d";
       continue;
     }
 
     // otherwise: kick out outliers!
-    std::shared_ptr<okvis::MultiFrame> multiFrame = estimator.multiFrame(
-        currentFrameId);
-
+    std::shared_ptr<okvis::MultiFrame> multiFrame = estimator.multiFrame(currentFrameId);
     for (size_t k = 0; k < numCorrespondences; ++k)
     {
       size_t idxB = adapter.getMatchKeypointIdxB(k);
       if (!inliers[k])
       {
-
         uint64_t lmId = multiFrame->landmarkId(im, k);
         // reset ID:
         multiFrame->setLandmarkId(im, k, 0);
@@ -884,12 +938,12 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
       }
     }
 
-    // initialize pose if necessary
+    // initialize pose if necessary (only called in MatchToKeyFrame)
     if (initializePose && !isInitialized_)
     {
       if (rel_pose_success)
         LOG(INFO)
-            << "Initializing pose from 2D-2D RANSAC";
+            << "Initializing pose from 2D-2D RANSAC: rel_pose_success==true";
       else
         LOG(INFO)
             << "Initializing pose from 2D-2D RANSAC: orientation only";
@@ -899,7 +953,7 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
       okvis::kinematics::Transformation T_SCA, T_WSA, T_SC0, T_WS0;
       uint64_t idA = olderFrameId;
       uint64_t id0 = currentFrameId;
-      estimator.getCameraSensorStates(idA, im, T_SCA);
+      estimator.getCameraSensorStates(idA, im, T_SCA); // Get camera states for a given pose ID
       estimator.get_T_WS(idA, T_WSA);
       estimator.getCameraSensorStates(id0, im, T_SC0);
       estimator.get_T_WS(id0, T_WS0);
@@ -916,7 +970,7 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
             * T_WSA.inverse() * T_WS0 * T_SC0;
         T_C1C2_mat.topRightCorner<3, 1>() = T_C1C2_mat.topRightCorner<3, 1>()
             * std::max( 0.0, double(
-                    T_C1C2_mat.topRightCorner<3, 1>().transpose() * T_C1C2.r()));
+                    T_C1C2_mat.topRightCorner<3, 1>().transpose() * T_C1C2.r())); // r(): translation vector
       }
       else
       {
@@ -926,9 +980,7 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
       }
 
       // set.
-      estimator.set_T_WS(
-          id0,
-          T_WSA * T_SCA * okvis::kinematics::Transformation(T_C1C2_mat)
+      estimator.set_T_WS(id0, T_WSA * T_SCA * okvis::kinematics::Transformation(T_C1C2_mat)
               * T_SC0.inverse());
     }
   }

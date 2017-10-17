@@ -655,7 +655,8 @@ std::shared_ptr<okvis::ceres::ParameterBlock> Map::parameterBlockPtr(
 
 // Get a shared pointer to a parameter block.
 std::shared_ptr<const okvis::ceres::ParameterBlock> Map::parameterBlockPtr(
-    uint64_t parameterBlockId) const {
+    uint64_t parameterBlockId) const
+{
   // get a parameterBlock
   if (parameterBlockExists(parameterBlockId)) {
     return id2ParameterBlock_Map_.find(parameterBlockId)->second;

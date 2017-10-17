@@ -80,7 +80,8 @@ void PoseParameterBlock::setEstimate(
 
 // getters
 // Get estimate.
-okvis::kinematics::Transformation PoseParameterBlock::estimate() const {
+okvis::kinematics::Transformation PoseParameterBlock::estimate() const
+{
   return okvis::kinematics::Transformation(
       Eigen::Vector3d(parameters_[0], parameters_[1], parameters_[2]),
       Eigen::Quaterniond(parameters_[6], parameters_[3], parameters_[4],

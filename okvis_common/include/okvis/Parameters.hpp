@@ -240,6 +240,7 @@ struct Optimization{
   double detectionThreshold;  ///< Keypoint detection threshold.
   double detectionMatchingThreshold;
   double detectionMatchingRatioThreshold;
+  double rotationOnlyThreshold; ///< the threshold to determine whether it is only orientation success initialization
   bool useMedianFilter;     ///< Use a Median filter over captured image?
   bool IsVerbose; ///< Is output all ceres solver details?
   bool IsOriginalFeatureDetector; ///< is using cv::Fast or sse Harris corner detector (the original)?
