@@ -288,9 +288,10 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
                           const okvis::ImuParameters & imuParams,
                           okvis::kinematics::Transformation& T_WS,
                           okvis::SpeedAndBias & speedAndBiases,
-                          const okvis::Time & t_start,
+                          const okvis::Time & t_start, //start may not be a regular imu timestamp
                           const okvis::Time & t_end, covariance_t* covariance,
-                          jacobian_t* jacobian) {
+                          jacobian_t* jacobian)
+{
 
   // now the propagation
   okvis::Time time = t_start;
@@ -328,7 +329,8 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
   bool hasStarted = false;
   int i = 0;
   for (okvis::ImuMeasurementDeque::const_iterator it = imuMeasurements.begin();
-        it != imuMeasurements.end(); ++it) {
+        it != imuMeasurements.end(); ++it)
+  {
 
     Eigen::Vector3d omega_S_0 = it->measurement.gyroscopes;
     Eigen::Vector3d acc_S_0 = it->measurement.accelerometers;
@@ -337,14 +339,19 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
 
     // time delta
     okvis::Time nexttime;
-    if ((it + 1) == imuMeasurements.end()) {
+    if ((it + 1) == imuMeasurements.end())
+    {
       nexttime = t_end;
-    } else
+    }
+    else
+    {
       nexttime = (it + 1)->timeStamp;
+    }
     double dt = (nexttime - time).toSec();
 
 
-    if (end < nexttime) {
+    if (end < nexttime) // interpolate at the end
+    {
       double interval = (nexttime - it->timeStamp).toSec();
       nexttime = t_end;
       dt = (nexttime - time).toSec();
@@ -358,10 +365,11 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
     }
     Delta_t += dt;
 
-    if (!hasStarted) {
+    if (!hasStarted) // interpolate at the start
+    {
       hasStarted = true;
       const double r = dt / (nexttime - it->timeStamp).toSec();
-      omega_S_0 = (r * omega_S_0 + (1.0 - r) * omega_S_1).eval();
+      omega_S_0 = (r * omega_S_0 + (1.0 - r) * omega_S_1).eval(); // force eigen do immediate evaluation instead of lazy evaluation
       acc_S_0 = (r * acc_S_0 + (1.0 - r) * acc_S_1).eval();
     }
 
@@ -417,7 +425,8 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
     dp_db_g += dt*dv_db_g + 0.25*dt*dt*(C*acc_S_x*cross + C_1*acc_S_x*cross_1);
 
     // covariance propagation
-    if (covariance) {
+    if (covariance)
+    {
       Eigen::Matrix<double,15,15> F_delta = Eigen::Matrix<double,15,15>::Identity();
       // transform
       F_delta.block<3,3>(0,3) = -okvis::kinematics::crossMx(acc_integral*dt + 0.25*(C + C_1)*acc_S_true*dt*dt);
@@ -477,7 +486,8 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
   speedAndBiases.head<3>() += C_WS_0*(acc_integral/*-C_integral*speedAndBiases.segment<3>(6)*/)-g_W*Delta_t;
 
   // assign Jacobian, if requested
-  if (jacobian) {
+  if (jacobian)
+  {
     Eigen::Matrix<double,15,15> & F = *jacobian;
     F.setIdentity(); // holds for all states, including d/dalpha, d/db_g, d/db_a
     F.block<3,3>(0,3) = -okvis::kinematics::crossMx(C_WS_0*acc_doubleintegral);
@@ -491,14 +501,17 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
   }
 
   // overall covariance, if requested
-  if (covariance) {
+  if (covariance)
+  {
     Eigen::Matrix<double,15,15> & P = *covariance;
     // transform from local increments to actual states
+
+    //T is the jacobian of the imu error term w.r.t. the delta of next pose guess, with orientation error sitting inside
     Eigen::Matrix<double,15,15> T = Eigen::Matrix<double,15,15>::Identity();
     T.topLeftCorner<3,3>() = C_WS_0;
     T.block<3,3>(3,3) = C_WS_0;
     T.block<3,3>(6,6) = C_WS_0;
-    P = T * P_delta * T.transpose();
+    P = T * P_delta * T.transpose(); // equation (18) of the paper
   }
   return i;
 }

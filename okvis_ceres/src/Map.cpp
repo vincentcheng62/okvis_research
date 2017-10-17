@@ -98,12 +98,13 @@ void Map::printResidualBlockInfo(
 }
 
 // Obtain the Hessian block for a specific parameter block.
-void Map::getLhs(uint64_t parameterBlockId, Eigen::MatrixXd& H) {
+void Map::getLhs(uint64_t parameterBlockId, Eigen::MatrixXd& H)
+{
   OKVIS_ASSERT_TRUE_DBG(Exception,parameterBlockExists(parameterBlockId),"parameter block not in map.");
   ResidualBlockCollection res = residuals(parameterBlockId);
   H.setZero();
-  for (size_t i = 0; i < res.size(); ++i) {
-
+  for (size_t i = 0; i < res.size(); ++i)
+  {
     // parameters:
     ParameterBlockCollection pars = parameters(res[i].residualBlockId);
 

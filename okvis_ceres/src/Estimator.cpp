@@ -823,19 +823,20 @@ bool Estimator::initPoseFromImu(
   if (imuMeasurements.size() == 0)
     return false;
 
-  // acceleration vector
+  // just use the acceleration vector to guess the orientation
   Eigen::Vector3d acc_B = Eigen::Vector3d::Zero();
   for (okvis::ImuMeasurementDeque::const_iterator it = imuMeasurements.begin();
-      it < imuMeasurements.end(); ++it) {
+      it < imuMeasurements.end(); ++it)
+  {
     acc_B += it->measurement.accelerometers;
   }
-  acc_B /= double(imuMeasurements.size());
-  Eigen::Vector3d e_acc = acc_B.normalized();
+  acc_B /= double(imuMeasurements.size()); // average acceleration
+  Eigen::Vector3d e_acc = acc_B.normalized(); // normalized average acceleration, actually equals to acc_B/gravity
 
-  // align with ez_W:
+  // align with ez_W (i.e. the world frame should have z-axis has 1g acceleration):
   Eigen::Vector3d ez_W(0.0, 0.0, 1.0);
   Eigen::Matrix<double, 6, 1> poseIncrement;
-  poseIncrement.head<3>() = Eigen::Vector3d::Zero();
+  poseIncrement.head<3>() = Eigen::Vector3d::Zero(); // no translation is approximated
   poseIncrement.tail<3>() = ez_W.cross(e_acc).normalized();
   double angle = std::acos(ez_W.transpose() * e_acc);
   poseIncrement.tail<3>() *= angle;
@@ -860,13 +861,20 @@ void Estimator::optimize(size_t numIter, size_t /*numThreads*/,
   //mapPtr_->options.initial_trust_region_radius = 1.0e4;
   //mapPtr_->options.initial_trust_region_radius = 2.0e6;
   //mapPtr_->options.preconditioner_type = ::ceres::IDENTITY;
+
+  // Powell's dogleg algorithm interpolates between the Cauchy point
+  // and the Gauss-Newton step. It is particularly useful if the
+  // LEVENBERG_MARQUARDT algorithm is making a large number of
+  // unsuccessful steps. For more details see dogleg_strategy.h.
   mapPtr_->options.trust_region_strategy_type = ::ceres::DOGLEG;
+
   //mapPtr_->options.trust_region_strategy_type = ::ceres::LEVENBERG_MARQUARDT;
   //mapPtr_->options.use_nonmonotonic_steps = true;
   //mapPtr_->options.max_consecutive_nonmonotonic_steps = 10;
   //mapPtr_->options.function_tolerance = 1e-12;
   //mapPtr_->options.gradient_tolerance = 1e-12;
   //mapPtr_->options.jacobi_scaling = false;
+
 #ifdef USE_OPENMP
     mapPtr_->options.num_threads = numThreads;
 #endif
@@ -883,13 +891,18 @@ void Estimator::optimize(size_t numIter, size_t /*numThreads*/,
 
   // update landmarks
   {
-    for(auto it = landmarksMap_.begin(); it!=landmarksMap_.end(); ++it){
+    for(auto it = landmarksMap_.begin(); it!=landmarksMap_.end(); ++it)
+    {
       Eigen::MatrixXd H(3,3);
-      mapPtr_->getLhs(it->first,H);
+
+      //it->first is the index
+      mapPtr_->getLhs(it->first,H); // getLhs: Obtain the Hessian block for a specific parameter block.
       Eigen::SelfAdjointEigenSolver< Eigen::Matrix3d > saes(H);
       Eigen::Vector3d eigenvalues = saes.eigenvalues();
       const double smallest = (eigenvalues[0]);
       const double largest = (eigenvalues[2]);
+
+      //it->second is the MapPoint
       if(smallest<1.0e-12){
         // this means, it has a non-observable depth
         it->second.quality = 0.0;

@@ -241,6 +241,8 @@ struct Optimization{
   double detectionMatchingThreshold;
   double detectionMatchingRatioThreshold;
   bool useMedianFilter;     ///< Use a Median filter over captured image?
+  bool IsVerbose; ///< Is output all ceres solver details?
+  bool IsOriginalFeatureDetector; ///< is using cv::Fast or sse Harris corner detector (the original)?
   int detectionOctaves;     ///< Number of keypoint detection octaves.
   int maxNoKeypoints;       ///< Restrict to a maximum of this many keypoints per image (strongest ones).
   int numKeyframes; ///< Number of keyframes.

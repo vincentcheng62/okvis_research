@@ -247,6 +247,11 @@ class Frontend : public VioFrontendInterface {
     initialiseBriskFeatureDetectors();
   }
 
+  void setIsOriginalFeatureDetector(bool value) {
+    IsOriginalFeatureDetector_ = value;
+    initialiseBriskFeatureDetectors();
+  }
+
   /// @brief Set the matching threshold.
   void setBriskMatchingRatioThreshold(double threshold) {
     briskMatchingRatioThreshold_ = threshold;
@@ -270,7 +275,6 @@ class Frontend : public VioFrontendInterface {
   double rotation_only_ratio_; ///< the threshold ratio for rotation only ransac such that beyond that will think it is orientation only
   size_t ransacinlinersminnumber_;   ///< the inliner threshold for
   size_t required3d2dmatches_;
-  bool IsOriginalFeatureDetector_;
 
   /**
    * @brief   feature detectors with the current settings.
@@ -304,6 +308,7 @@ class Frontend : public VioFrontendInterface {
 
   bool briskDescriptionRotationInvariance_; ///< The set rotation invariance setting.
   bool briskDescriptionScaleInvariance_;    ///< The set scale invariance setting.
+  bool briskDescriptionPatternScale_; ///< apply this scale to the pattern used for sampling the neighbourhood of a keypoint.
 
   ///@}
   /// @name BRISK matching parameters
@@ -311,6 +316,7 @@ class Frontend : public VioFrontendInterface {
 
   double briskMatchingThreshold_; ///< The set BRISK matching threshold.
   double briskMatchingRatioThreshold_;///< The set BRISK matching ratio threshold.
+  bool IsOriginalFeatureDetector_; ///<is using cv::Fast or sse Harris corner detector (the original)?
 
   ///@}
 

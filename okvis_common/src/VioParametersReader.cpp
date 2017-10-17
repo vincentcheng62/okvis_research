@@ -109,6 +109,7 @@ void VioParametersReader::readConfigFile(const std::string& filename) {
         << "ceres_options: minIterations parameter not provided. Setting to default minIterations=1";
     vioParameters_.optimization.min_iterations = 1;
   }
+
   // maximum ceres iterations
   if (file["ceres_options"]["maxIterations"].isInt()) {
     file["ceres_options"]["maxIterations"]
@@ -118,6 +119,7 @@ void VioParametersReader::readConfigFile(const std::string& filename) {
         << "ceres_options: maxIterations parameter not provided. Setting to default maxIterations=10.";
     vioParameters_.optimization.max_iterations = 10;
   }
+
   // ceres time limit
   if (file["ceres_options"]["timeLimit"].isReal()) {
     file["ceres_options"]["timeLimit"] >> vioParameters_.optimization.timeLimitForMatchingAndOptimization;
@@ -127,8 +129,20 @@ void VioParametersReader::readConfigFile(const std::string& filename) {
     vioParameters_.optimization.timeLimitForMatchingAndOptimization = -1.0;
   }
 
+  // Is Verbose optimization output
+  bool success = parseBoolean(file["ceres_options"]["isverbose"],
+                         vioParameters_.optimization.IsVerbose);
+  OKVIS_ASSERT_TRUE(Exception, success,
+                    "'isverbose' parameter missing in configuration file.");
+
+  // Is using new cv::Fast detector?
+  success = parseBoolean(file["detection_options"]["IsHarris"],
+                         vioParameters_.optimization.IsOriginalFeatureDetector);
+  OKVIS_ASSERT_TRUE(Exception, success,
+                    "'IsFast' parameter missing in configuration file.");
+
   // do we use the direct driver?
-  bool success = parseBoolean(file["useDriver"], useDriver);
+  success = parseBoolean(file["useDriver"], useDriver);
   OKVIS_ASSERT_TRUE(Exception, success,
                     "'useDriver' parameter missing in configuration file.");
 

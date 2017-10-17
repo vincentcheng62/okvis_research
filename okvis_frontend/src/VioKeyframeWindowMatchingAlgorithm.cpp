@@ -75,6 +75,7 @@ VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::~VioKeyframeWindowMatchin
 }
 
 // Set which frames to match.
+// Current frame is B, old frame is A
 template<class CAMERA_GEOMETRY_T>
 void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setFrames(
     uint64_t mfIdA, uint64_t mfIdB, size_t camIdA, size_t camIdB)

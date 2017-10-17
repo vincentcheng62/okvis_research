@@ -102,6 +102,7 @@ void ThreadedKFVio::init()
   frontend_.setBriskMatchingThreshold(parameters_.optimization.detectionMatchingThreshold);
   frontend_.setBriskMatchingRatioThreshold(parameters_.optimization.detectionMatchingRatioThreshold);
   frontend_.setBriskDetectionMaximumKeypoints(parameters_.optimization.maxNoKeypoints);
+  frontend_.setIsOriginalFeatureDetector(parameters_.optimization.IsOriginalFeatureDetector);
 
   lastOptimizedStateTimestamp_ = okvis::Time(0.0) + temporal_imu_data_overlap;  // s.t. last_timestamp_ - overlap >= 0 (since okvis::time(-0.02) returns big number)
   lastAddedStateTimestamp_ = okvis::Time(0.0) + temporal_imu_data_overlap;  // s.t. last_timestamp_ - overlap >= 0 (since okvis::time(-0.02) returns big number)
@@ -153,11 +154,12 @@ void ThreadedKFVio::startThreads() {
   // algorithm threads
   visualizationThread_ = std::thread(&ThreadedKFVio::visualizationLoop, this); // print the matching
   //optimizationThread_ = std::thread(&ThreadedKFVio::optimizationLoop, this);
-  publisherThread_ = std::thread(&ThreadedKFVio::publisherLoop, this);
+  publisherThread_ = std::thread(&ThreadedKFVio::publisherLoop, this); // invoke those callback functions
 }
 
 // Destructor. This calls Shutdown() for all threadsafe queues and joins all threads.
-ThreadedKFVio::~ThreadedKFVio() {
+ThreadedKFVio::~ThreadedKFVio()
+{
   for (size_t i = 0; i < numCameras_; ++i) {
     cameraMeasurementsReceived_.at(i)->Shutdown();
   }
@@ -367,17 +369,20 @@ void ThreadedKFVio::addDifferentialPressureMeasurement(const okvis::Time &,
 
 // Set the blocking variable that indicates whether the addMeasurement() functions
 // should return immediately (blocking=false), or only when the processing is complete.
-void ThreadedKFVio::setBlocking(bool blocking) {
+void ThreadedKFVio::setBlocking(bool blocking)
+{
   blocking_ = blocking;
   // disable time limit for optimization
-  if(blocking_) {
+  if(blocking_)
+  {
     std::lock_guard<std::mutex> lock(estimator_mutex_);
     estimator_.setOptimizationTimeLimit(-1.0,parameters_.optimization.max_iterations);
   }
 }
 
 // Loop to process frames from camera with index cameraIndex
-void ThreadedKFVio::frameConsumerLoop(size_t cameraIndex) {
+void ThreadedKFVio::frameConsumerLoop(size_t cameraIndex)
+{
   std::shared_ptr<okvis::CameraMeasurement> frame;
   std::shared_ptr<okvis::MultiFrame> multiFrame;
   TimerSwitchable beforeDetectTimer("1.1 frameLoopBeforeDetect"+std::to_string(cameraIndex),true);
@@ -391,17 +396,18 @@ void ThreadedKFVio::frameConsumerLoop(size_t cameraIndex) {
   TimerSwitchable waitForMatchingThreadTimer("1.4 waitForMatchingThread"+std::to_string(cameraIndex),true);
 
 
-  long long counter=0;
+  //long long counter=0;
   for (;;)
   {
-    LOG(INFO) << "frameConsumerLoop: " << counter;
-    counter++;
+    //LOG(INFO) << "frameConsumerLoop: " << counter;
+    //counter++;
     // get data and check for termination request
     if (cameraMeasurementsReceived_[cameraIndex]->PopBlocking(&frame) == false) {
       return;
     }
     beforeDetectTimer.start();
-    {  // lock the frame synchronizer
+    {
+      // lock the frame synchronizer
       waitForFrameSynchronizerMutexTimer.start();
       std::lock_guard<std::mutex> lock(frameSynchronizer_mutex_);
       waitForFrameSynchronizerMutexTimer.stop();
@@ -409,7 +415,10 @@ void ThreadedKFVio::frameConsumerLoop(size_t cameraIndex) {
       addNewFrameToSynchronizerTimer.start();
       multiFrame = frameSynchronizer_.addNewFrame(frame);
       addNewFrameToSynchronizerTimer.stop();
-    }  // unlock frameSynchronizer only now as we can be sure that not two states are added for the same timestamp
+    }
+    // unlock frameSynchronizer only now as we can be sure that not two states are added for the same timestamp
+
+
     okvis::kinematics::Transformation T_WS;
     okvis::Time lastTimestamp;
     okvis::SpeedAndBias speedAndBiases;
@@ -424,15 +433,16 @@ void ThreadedKFVio::frameConsumerLoop(size_t cameraIndex) {
     }
 
     // -- get relevant imu messages for new state
+    // so the range is old frame-20ms to new frame+20ms, all imu data within this range is considered
     okvis::Time imuDataEndTime = multiFrame->timestamp()
-        + temporal_imu_data_overlap;
+        + temporal_imu_data_overlap; // temporal_imu_data_overlap = 20ms
     okvis::Time imuDataBeginTime = lastTimestamp - temporal_imu_data_overlap;
 
     OKVIS_ASSERT_TRUE_DBG(Exception,imuDataBeginTime < imuDataEndTime,"imu data end time is smaller than begin time.");
 
     // wait until all relevant imu messages have arrived and check for termination request
-    if (imuFrameSynchronizer_.waitForUpToDateImuData(
-      okvis::Time(imuDataEndTime)) == false)  {
+    if (imuFrameSynchronizer_.waitForUpToDateImuData(okvis::Time(imuDataEndTime)) == false)
+    {
       return;
     }
     OKVIS_ASSERT_TRUE_DBG(Exception,
@@ -456,8 +466,9 @@ void ThreadedKFVio::frameConsumerLoop(size_t cameraIndex) {
     }
 
     // get T_WC(camIndx) for detectAndDescribe()
-    if (estimator_.numFrames() == 0) {
-      // first frame ever
+    if (estimator_.numFrames() == 0)
+    {
+      // first frame ever, init orientation by using imu acceleometer to calculate tilting angle
       bool success = okvis::Estimator::initPoseFromImu(imuData, T_WS);
       {
         std::lock_guard<std::mutex> lock(lastState_mutex_);
@@ -469,10 +480,13 @@ void ThreadedKFVio::frameConsumerLoop(size_t cameraIndex) {
       OKVIS_ASSERT_TRUE_DBG(Exception, success,
           "pose could not be initialized from imu measurements.");
       if (!success) {
+          LOG(INFO) << "pose could not be initialized from imu measurements.";
         beforeDetectTimer.stop();
         continue;
       }
-    } else {
+    }
+    else
+    {
       // get old T_WS
       propagationTimer.start();
       okvis::ceres::ImuError::propagation(imuData, parameters_.imu, T_WS,
@@ -480,29 +494,34 @@ void ThreadedKFVio::frameConsumerLoop(size_t cameraIndex) {
                                           multiFrame->timestamp());
       propagationTimer.stop();
     }
+
     okvis::kinematics::Transformation T_WC = T_WS
         * (*parameters_.nCameraSystem.T_SC(frame->sensorId));
     beforeDetectTimer.stop();
     detectTimer.start();
+
+    //Do keypt detection and description, use this approximate T_WC to help extracting along gravity direction
     frontend_.detectAndDescribe(frame->sensorId, multiFrame, T_WC, nullptr);
     detectTimer.stop();
     afterDetectTimer.start();
 
     bool push = false;
-    {  // we now tell frame synchronizer that detectAndDescribe is done for MF with our timestamp
+    {
+      // we now tell frame synchronizer that detectAndDescribe is done for MF with our timestamp
       waitForFrameSynchronizerMutexTimer2.start();
       std::lock_guard<std::mutex> lock(frameSynchronizer_mutex_);
       waitForFrameSynchronizerMutexTimer2.stop();
       frameSynchronizer_.detectionEndedForMultiFrame(multiFrame->id());
 
-      if (frameSynchronizer_.detectionCompletedForAllCameras(
-          multiFrame->id())) {
+      if (frameSynchronizer_.detectionCompletedForAllCameras(multiFrame->id()))
+      {
 //        LOG(INFO) << "detection completed for multiframe with id "<< multi_frame->id();
         push = true;
       }
     }  // unlocking frame synchronizer
     afterDetectTimer.stop();
-    if (push) {
+    if (push)
+    {
       // use queue size 1 to propagate a congestion to the _cameraMeasurementsReceived queue
       // and check for termination request
       waitForMatchingThreadTimer.start();
@@ -846,7 +865,7 @@ void ThreadedKFVio::matchingLoop()
       std::lock_guard<std::mutex> l(estimator_mutex_);
       optimizationTimer.start();
       //if(frontend_.isInitialized()){
-        estimator_.optimize(parameters_.optimization.max_iterations, 2, false);
+        estimator_.optimize(parameters_.optimization.max_iterations, 2, parameters_.optimization.IsVerbose);// max_iter, num_thread, Isverbose
       //}
       /*if (estimator_.numFrames() > 0 && !frontend_.isInitialized()){
         // undo translation
@@ -1038,12 +1057,16 @@ void ThreadedKFVio::imuConsumerLoop()
 
       if (parameters_.publishing.publishImuPropagatedState)
       {
+        // repropagationNeeded_ is false when init
+        // Will set to true after each optimization_loop
         if (!repropagationNeeded_ && imuMeasurements_.size() > 0)
         {
           start = imuMeasurements_.back().timeStamp;
         }
         else if (repropagationNeeded_)
         {
+          //It is an "update" phase to the "filter"
+          //Which gives measurements to T_WS_propagated_ and speedAndBiases_propagated_
           std::lock_guard<std::mutex> lastStateLock(lastState_mutex_);
           start = lastOptimizedStateTimestamp_;
           T_WS_propagated_ = lastOptimized_T_WS_;
@@ -1051,7 +1074,9 @@ void ThreadedKFVio::imuConsumerLoop()
           repropagationNeeded_ = false;
         }
         else
+        {
           start = okvis::Time(0, 0);
+        }
         end = &data.timeStamp;
       }
       imuMeasurements_.push_back(data);
@@ -1060,6 +1085,7 @@ void ThreadedKFVio::imuConsumerLoop()
     // notify other threads that imu data with timeStamp is here.
     imuFrameSynchronizer_.gotImuData(data.timeStamp);
 
+    //get an intermediate result by just having imu integration before the next camera frame comes
     if (parameters_.publishing.publishImuPropagatedState)
     {
       Eigen::Matrix<double, 15, 15> covariance;
@@ -1074,6 +1100,7 @@ void ThreadedKFVio::imuConsumerLoop()
       result.speedAndBiases = speedAndBiases_propagated_;
       result.omega_S = imuMeasurements_.back().measurement.gyroscopes
           - speedAndBiases_propagated_.segment<3>(3);
+
       for (size_t i = 0; i < parameters_.nCameraSystem.numCameras(); ++i)
       {
         result.vector_of_T_SCi.push_back(
@@ -1081,7 +1108,7 @@ void ThreadedKFVio::imuConsumerLoop()
                 *parameters_.nCameraSystem.T_SC(i)));
       }
       result.onlyPublishLandmarks = false;
-      optimizationResults_.PushNonBlockingDroppingIfFull(result,1);
+      optimizationResults_.PushNonBlockingDroppingIfFull(result,1); // Push to the queue. If full, drop the oldest entry.
     }
     processImuTimer.stop();
   }
@@ -1195,14 +1222,16 @@ okvis::ImuMeasurementDeque ThreadedKFVio::getImuMeasurments(
 }
 
 // Remove IMU measurements from the internal buffer.
-int ThreadedKFVio::deleteImuMeasurements(const okvis::Time& eraseUntil) {
+int ThreadedKFVio::deleteImuMeasurements(const okvis::Time& eraseUntil)
+{
   std::lock_guard<std::mutex> lock(imuMeasurements_mutex_);
   if (imuMeasurements_.front().timeStamp > eraseUntil)
     return 0;
 
   okvis::ImuMeasurementDeque::iterator eraseEnd;
   int removed = 0;
-  for (auto it = imuMeasurements_.begin(); it != imuMeasurements_.end(); ++it) {
+  for (auto it = imuMeasurements_.begin(); it != imuMeasurements_.end(); ++it)
+  {
     eraseEnd = it;
     if (it->timeStamp >= eraseUntil)
       break;
@@ -1220,22 +1249,23 @@ void ThreadedKFVio::optimizationLoop() {
   TimerSwitchable marginalizationTimer("3.2 marginalization",true);
   TimerSwitchable afterOptimizationTimer("3.3 afterOptimization",true);
 
-  long long counter=0;
+  //long long counter=0;
   for (;;)
   {
-    LOG(INFO) << "optimizationLoop: " << counter;
-    counter++;
+    //LOG(INFO) << "optimizationLoop: " << counter;
+    //counter++;
     std::shared_ptr<okvis::MultiFrame> frame_pairs;
     VioVisualizer::VisualizationData::Ptr visualizationDataPtr;
     okvis::Time deleteImuMeasurementsUntil(0, 0);
     if (matchedFrames_.PopBlocking(&frame_pairs) == false)
       return;
+
     OptimizationResults result;
     {
       std::lock_guard<std::mutex> l(estimator_mutex_);
       optimizationTimer.start();
       //if(frontend_.isInitialized()){
-        estimator_.optimize(parameters_.optimization.max_iterations, 2, false);
+        estimator_.optimize(parameters_.optimization.max_iterations, 2, parameters_.optimization.IsVerbose); // max_iter, num_thread, Isverbose
       //}
       /*if (estimator_.numFrames() > 0 && !frontend_.isInitialized()){
         // undo translation
@@ -1256,8 +1286,8 @@ void ThreadedKFVio::optimizationLoop() {
       optimizationTimer.stop();
 
       // get timestamp of last frame in IMU window. Need to do this before marginalization as it will be removed there (if not keyframe)
-      if (estimator_.numFrames()
-          > size_t(parameters_.optimization.numImuFrames)) {
+      if (estimator_.numFrames() > size_t(parameters_.optimization.numImuFrames))
+      {
         deleteImuMeasurementsUntil = estimator_.multiFrame(
             estimator_.frameIdByAge(parameters_.optimization.numImuFrames))
             ->timestamp() - temporal_imu_data_overlap;
@@ -1282,7 +1312,8 @@ void ThreadedKFVio::optimizationLoop() {
         lastOptimizedStateTimestamp_ = frame_pairs->timestamp();
 
         // if we publish the state after each IMU propagation we do not need to publish it here.
-        if (!parameters_.publishing.publishImuPropagatedState) {
+        if (!parameters_.publishing.publishImuPropagatedState)
+        {
           result.T_WS = lastOptimized_T_WS_;
           result.speedAndBiases = lastOptimizedSpeedAndBiases_;
           result.stamp = lastOptimizedStateTimestamp_;
@@ -1302,8 +1333,7 @@ void ThreadedKFVio::optimizationLoop() {
             new VioVisualizer::VisualizationData());
         visualizationDataPtr->observations.resize(frame_pairs->numKeypoints());
         okvis::MapPoint landmark;
-        okvis::ObservationVector::iterator it = visualizationDataPtr
-            ->observations.begin();
+        okvis::ObservationVector::iterator it = visualizationDataPtr->observations.begin();
 
         for (size_t camIndex = 0; camIndex < frame_pairs->numFrames();++camIndex)
         {
@@ -1344,9 +1374,11 @@ void ThreadedKFVio::optimizationLoop() {
     }  // unlock mutex
     optimizationNotification_.notify_all();
 
-    if (!parameters_.publishing.publishImuPropagatedState) {
+    if (!parameters_.publishing.publishImuPropagatedState)
+    {
       // adding further elements to result that do not access estimator.
-      for (size_t i = 0; i < parameters_.nCameraSystem.numCameras(); ++i) {
+      for (size_t i = 0; i < parameters_.nCameraSystem.numCameras(); ++i)
+      {
         result.vector_of_T_SCi.push_back(
             okvis::kinematics::Transformation(
                 *parameters_.nCameraSystem.T_SC(i)));

@@ -75,6 +75,7 @@ Frontend::Frontend(size_t numCameras)
       briskDetectionMaximumKeypoints_(450),
       briskDescriptionRotationInvariance_(true),
       briskDescriptionScaleInvariance_(false),
+      briskDescriptionPatternScale_(1.0),
       briskMatchingThreshold_(60.0), // default 60.0
       briskMatchingRatioThreshold_(3.0),
       matcher_(
@@ -101,7 +102,8 @@ Frontend::Frontend(size_t numCameras)
 bool Frontend::detectAndDescribe(size_t cameraIndex,
                                  std::shared_ptr<okvis::MultiFrame> frameOut,
                                  const okvis::kinematics::Transformation& T_WC,
-                                 const std::vector<cv::KeyPoint> * keypoints) {
+                                 const std::vector<cv::KeyPoint> * keypoints)
+{
   OKVIS_ASSERT_TRUE_DBG(Exception, cameraIndex < numCameras_, "Camera index exceeds number of cameras.");
   std::lock_guard<std::mutex> lock(*featureDetectorMutexes_[cameraIndex]);
 
@@ -114,6 +116,8 @@ bool Frontend::detectAndDescribe(size_t cameraIndex,
   frameOut->detect(cameraIndex);
 
   // ExtractionDirection == gravity direction in camera frame
+  // From the paper: better matching result are obtained by extracting descriptors
+  // oriented along the gravity direction that is projected into the image
   Eigen::Vector3d g_in_W(0, 0, -1);
   Eigen::Vector3d extractionDirection = T_WC.inverse().C() * g_in_W;
   frameOut->describe(cameraIndex, extractionDirection);
@@ -310,9 +314,11 @@ bool Frontend::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
                            okvis::kinematics::Transformation& T_WS_propagated,
                            okvis::SpeedAndBias & speedAndBiases,
                            const okvis::Time& t_start, const okvis::Time& t_end,
-                           Eigen::Matrix<double, 15, 15>* covariance,
-                           Eigen::Matrix<double, 15, 15>* jacobian) const {
-  if (imuMeasurements.size() < 2) {
+                           Eigen::Matrix<double, 15, 15>* covariance, // output covariance
+                           Eigen::Matrix<double, 15, 15>* jacobian) const // output jacobian
+{
+  if (imuMeasurements.size() < 2)
+  {
     LOG(WARNING)
         << "- Skipping propagation as only one IMU measurement has been given to frontend."
         << " Normal when starting up.";
@@ -979,7 +985,9 @@ void Frontend::initialiseBriskFeatureDetectors()
         std::shared_ptr<cv::DescriptorExtractor>(
             new brisk::BriskDescriptorExtractor(
                 briskDescriptionRotationInvariance_,
-                briskDescriptionScaleInvariance_)));
+                briskDescriptionScaleInvariance_,
+                2, // Using version2 of brisk
+                briskDescriptionPatternScale_)));
   }
 
   for (auto it = featureDetectorMutexes_.begin();

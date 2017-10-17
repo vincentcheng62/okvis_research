@@ -52,9 +52,12 @@ void DenseMatcher::matchBody(
   // create lock list
   std::mutex* locks = new std::mutex[matchingAlgorithm.sizeB()];
 
-  //the pairing list
+  //the pairing list for each "B" point, where B is current frame
+  //typedef DenseMatcher::Pairing pairing_t;
+  //typedef std::vector<pairing_t> pairing_list_t;
   pairing_list_t vpairs;
-  // a list with best matches for each "A" point
+
+  // a list of "B" point with best matches for each "A" point, where A is old (key) frame
   std::vector<std::vector<pairing_t> > vMyBest;
 
   vMyBest.resize(matchingAlgorithm.sizeA());
@@ -98,34 +101,39 @@ void DenseMatcher::matchBody(
   const distance_t& const_distratiothres = matchingAlgorithm.distanceRatioThreshold();
   const distance_t& const_distthres = matchingAlgorithm.distanceThreshold();
 
+  // i is the indexB
   for (size_t i = 0; i < vpairs.size(); ++i)
   {
     if (useDistanceRatioThreshold_ && vpairs[i].distance < const_distthres)
     {
-      const std::vector<pairing_t>& best_matches_list =
-          vMyBest[vpairs[i].indexA];
+      const std::vector<pairing_t>& best_matches_list = vMyBest[vpairs[i].indexA];
       OKVIS_ASSERT_TRUE_DBG(Exception, best_matches_list[0].indexA != -1,
                             "assertion failed");
 
-      if (best_matches_list[1].indexA != -1)
+      if (best_matches_list[0].indexA == i) // if best of A->B is also the one of B->A
       {
-        const distance_t& best_match_distance = best_matches_list[0].distance;
-        const distance_t& second_best_match_distance = best_matches_list[1]
-            .distance;
+          if (best_matches_list[1].indexA != -1) // i.e. second candidate exists
+          {
+            const distance_t& best_match_distance = best_matches_list[0].distance;
+            const distance_t& second_best_match_distance = best_matches_list[1].distance;
 
-        // Only assign if the distance ratio better than the threshold.
-        if (best_match_distance == 0 ||
-                second_best_match_distance / best_match_distance > const_distratiothres)
-        {
-          matchingAlgorithm.setBestMatch(vpairs[i].indexA, i,
-                                         vpairs[i].distance);
-        }
+            // Only assign if the distance ratio better than the threshold.
+            if (best_match_distance == 0 ||
+                    second_best_match_distance / best_match_distance > const_distratiothres)
+            {
+              matchingAlgorithm.setBestMatch(vpairs[i].indexA, i,
+                                             vpairs[i].distance);
+            }
+          }
+
+          //If second candidate not exists, it means B->A and A->B are both unique
+          else
+          {
+            // If there is only one matching feature, we assign it.
+            matchingAlgorithm.setBestMatch(vpairs[i].indexA, i, vpairs[i].distance);
+          }
       }
-      else
-      {
-        // If there is only one matching feature, we assign it.
-        matchingAlgorithm.setBestMatch(vpairs[i].indexA, i, vpairs[i].distance);
-      }
+
     }
 
     //Not using distance ratio
@@ -167,14 +175,16 @@ void DenseMatcher::matchInImageSpace(MATCHING_ALGORITHM_T & matchingAlgorithm) {
 template<typename MATCHING_ALGORITHM_T>
 inline void DenseMatcher::listBIteration(
     MATCHING_ALGORITHM_T* matchingAlgorithm, std::vector<pairing_t>& aiBest,
-    size_t shortindexA, size_t i) {
+    size_t shortindexA, size_t i)
+{
   OKVIS_ASSERT_TRUE(std::runtime_error, matchingAlgorithm != NULL,
                     "matching algorithm is NULL");
   typename DenseMatcher::distance_t tmpdist;
 
   // is this better than worst found so far?
   tmpdist = matchingAlgorithm->distance(shortindexA, i);
-  if (tmpdist < aiBest[numBest_ - 1].distance) {
+  if (tmpdist < aiBest[numBest_ - 1].distance)
+  {
     pairing_t tmp(static_cast<int>(i), tmpdist);
     typename std::vector<pairing_t>::iterator lb = std::lower_bound(
         aiBest.begin(), aiBest.end(), tmp);  //get position for insertion
@@ -200,7 +210,8 @@ void DenseMatcher::doWorkLinearMatching(
 {
   OKVIS_ASSERT_TRUE(std::runtime_error, matchingAlgorithm != NULL,
                     "matching algorithm is NULL");
-  try {
+  try
+  {
     int start = my_job.iThreadID;
     distance_t const_distthres = matchingAlgorithm->distanceThreshold();
     if (useDistanceRatioThreshold_)
@@ -225,7 +236,8 @@ void DenseMatcher::doWorkLinearMatching(
       aiBest.resize(numBest_, pairing_t(-1, const_distthres));  //the best x matches for this feature from the long list
 
       size_t numElementsInListB = matchingAlgorithm->sizeB();
-      for (size_t i = 0; i < numElementsInListB; ++i) {
+      for (size_t i = 0; i < numElementsInListB; ++i)
+      {
         if (matchingAlgorithm->skipB(i)) {
           continue;
         }
@@ -236,7 +248,9 @@ void DenseMatcher::doWorkLinearMatching(
       assignbest(static_cast<int>(shortindexA), *(my_job.vpairs),
                  *(my_job.vMyBest), my_job.mutexes, 0);  //this call assigns the match and reassigns losing matches recursively
     }
-  } catch (const std::exception & e) {
+  }
+  catch (const std::exception & e)
+  {
     // \todo Install an error handler in the matching algorithm?
     std::cout << "\033[31mException in matching thread:\033[0m " << e.what();
   }

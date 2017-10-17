@@ -53,16 +53,18 @@ numImuFrames: 3 # number of frames linked by most recent nonlinear IMU error ter
 # ceres optimization options
 ceres_options:
     minIterations: 3   # minimum number of iterations always performed
-    maxIterations: 10  # never do more than these, even if not converged
+    maxIterations: 15  # never do more than these, even if not converged
     timeLimit: -1   # [s] negative values will set the an unlimited time limit
+    isverbose: true # whether output all ceres optimization details
 
 # detection
 detection_options:
-    threshold: 10.0      # detection threshold. By default the uniformity radius in pixels
+    threshold: 8.0      # detection threshold. By default the uniformity radius in pixels
     matching_threshold: 30.0    # the threshold for the hamming distance between 2 descriptors, more strict for lower value
     matching_ratio_threshold: 1.5 # the ratio threshold s.t. second/best>threshold will be matched
-    octaves: 0           # number of octaves for detection. 0 means single-scale at highest resolution
+    octaves: 2           # number of octaves for detection. 0 means single-scale at highest resolution
     maxNoKeypoints: 400  # restrict to a maximum of this many keypoints per image (strongest ones)
+    IsHarris: true        # is using Fast or sse Harris corner detector (the original)
 
 # delay of images [s]:
 imageDelay: 0.00692948365106  # in case you are using a custom setup, you will have to calibrate this. 0 for the VISensor.
@@ -77,7 +79,7 @@ useDriver: true
 # some options for how and what to publish -- optional in ROS-free version
 publishing_options:
     publish_rate: 500                  # rate at which odometry updates are published only works properly if imu_rate/publish_rate is an integer!!
-    publishLandmarks: treu             # select, if you want to publish landmarks at all
+    publishLandmarks: true             # select, if you want to publish landmarks at all
     landmarkQualityThreshold: 1.0e-2   # landmark with lower quality will not be published
     maximumLandmarkQuality: 0.05       # landmark with higher quality will be published with the maximum colour intensity
     maxPathLength: 20                  # maximum length of the published path
