@@ -329,7 +329,8 @@ class ThreadedKFVio : public VioInterface {
   /// the state from the lastOptimizedStateTimestamp_.
   std::atomic_bool repropagationNeeded_;
 
-  bool IsImageNormalized_; // is the image process to increase overall brightness?
+  bool IsImageNormalized_; ///< is the image process to increase overall brightness?
+  float GammaCorrectionFactor_; ///< factor for gamma correction, the greater the brighter
 
   /// @}
 

@@ -188,12 +188,14 @@ bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::stereoTriangulate(
   frameA_->getKeypoint(camIdA_, keypointIdxA, keypointCoordinatesA);
   frameB_->getKeypoint(camIdB_, keypointIdxB, keypointCoordinatesB);
 
+  //Back-project a 2d image point into Euclidean space (direction vector)
   frameA_->geometryAs<CAMERA_GEOMETRY_T>(camIdA_)->backProject(
       keypointCoordinatesA, &backProjectionDirectionA_inA);
   frameB_->geometryAs<CAMERA_GEOMETRY_T>(camIdB_)->backProject(
       keypointCoordinatesB, &backProjectionDirectionB_inA);  // direction in frame B
   backProjectionDirectionB_inA = T_AB_.C() * backProjectionDirectionB_inA;
 
+  //Check whether the 2 light rays are parallel, if so, triangulation result may be inaccurate
   Eigen::Vector4d hpA = triangulateFast(
       Eigen::Vector3d(0, 0, 0),  // center of A in A coordinates (0,0,0)
       backProjectionDirectionA_inA.normalized(), T_AB_.r(),  // center of B in A coordinates
@@ -209,17 +211,20 @@ bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::stereoTriangulate(
   isValid = computeReprojectionError4(frameA_, camIdA_, keypointIdxA, hpA,
                                       errA);
   if (!isValid) {
+    LOG(INFO) << "computeReprojectionError4 for frameA is invalid, cannot add landmark";
     return false;
   }
   Eigen::Vector4d outHomogeneousPoint_B = T_BA_ * Eigen::Vector4d(hpA);
   if (!computeReprojectionError4(frameB_, camIdB_, keypointIdxB,
                                  outHomogeneousPoint_B, errB)) {
     isValid = false;
+    LOG(INFO) << "computeReprojectionError4 for frameB is invalid, cannot add landmark";
     return false;
   }
 
   //if none of the reprojection error exceed 4 px
   if (errA > 4.0 || errB > 4.0) {
+    LOG(INFO) << "errA > 4.0 || errB > 4.0, cannot add landmark";
     isValid = false;
   }
 
@@ -339,9 +344,14 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::getUncertainty(
   reprojectionErrorB.EvaluateWithMinimalJacobians(parametersB, residualB.data(),
                                                   jacobiansB, jacobiansB_min);
   if (residualB.transpose() * residualB < 4.0)
+  {
     outCanBeInitialized = false;
+    LOG(INFO) << "norm(residualB)<4.0, the landmark will not be initialized";
+  }
   else
+  {
     outCanBeInitialized = true;
+  }
 
   // now add to H:
   H.bottomRightCorner<3, 3>() += J_hpA_min.transpose() * J_hpA_min;
@@ -355,6 +365,7 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::getUncertainty(
   if (H.colPivHouseholderQr().rank() < 9)
   {
     outCanBeInitialized = false;
+    //LOG(INFO) << "H is not full rank, the landmark will not be initialized";
     return;
   }
   cov = H.inverse();  // FIXME: use the QR decomposition for this...

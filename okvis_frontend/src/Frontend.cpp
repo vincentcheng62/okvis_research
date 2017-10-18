@@ -218,6 +218,7 @@ bool Frontend::dataAssociationAndInitialization(
       }
     }
 
+    //num3dMatches is the total number of match for 3D-2D with past 3 keyframes and 2D-2D with past 2 keyframes
     if (num3dMatches <= required3d2dmatches_) {
       LOG(WARNING) << "Tracking failure. Number of 3d2d-matches: " << num3dMatches << " <= " << required3d2dmatches_;
     }
@@ -429,6 +430,7 @@ bool Frontend::doWeNeedANewKeyframe(
 }
 
 // Match a new multiframe to existing keyframes
+// Perform 3D-2D with past 3 keyframes and 2D-2D with past 2 keyframes
 template<class MATCHING_ALGORITHM>
 int Frontend::matchToKeyframes(okvis::Estimator& estimator,
                                const okvis::VioParameters & params,
@@ -478,7 +480,7 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
       break;
   }
 
-  // Do the same thing again with Match2D2D
+  // Do the same thing again with Match2D2D with last 2 keyframes
   kfcounter = 0;
   bool firstFrame = true;
   for (size_t age = 1; age < estimator.numFrames(); ++age)
@@ -542,6 +544,7 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
 }
 
 // Match a new multiframe to the last frame.
+// Doing 3D-2D and 2D-2D with the last frame for once (if last frame not keyframe)
 template<class MATCHING_ALGORITHM>
 int Frontend::matchToLastFrame(okvis::Estimator& estimator,
                                const okvis::VioParameters& params,

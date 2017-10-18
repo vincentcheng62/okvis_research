@@ -151,8 +151,8 @@ struct MapPoint
    * @brief Constructor.
    * @param id        ID of the point. E.g. landmark ID.
    * @param point     Homogeneous coordinate of the point.
-   * @param quality   Quality of the point. Usually between 0 and 1.
-   * @param distance  Distance to origin of the frame the coordinates are given in.
+   * @param quality   Quality of the point. Usually between 0 and 1. equals sqrt(smallest)/sqrt(largest) of the eigenvalue of the LHS hessian block of the mapPtr
+   * @param distance  Distance to origin of the frame the coordinates are given in. dist = (landmark/landmark[3]).head<3>().norm();
    */
   MapPoint(uint64_t id, const Eigen::Vector4d & point,
            double quality, double distance)

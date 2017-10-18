@@ -134,7 +134,7 @@ Image imagecopy;
 std::vector<imudata> gIMUframes;
 std::vector<TimeStamp> gImageframes;
 int awayfromlastsynccounter = -1000; // used in ReadIMUData(), but also helps to determine when to turn BothStart to true
-fstream fp;
+fstream fp ,fp2;
 double total_length_of_travel=0;
 
 QT_USE_NAMESPACE
@@ -750,6 +750,20 @@ class PoseViewer
     drawing_ = false;
     showing_ = false;
   }
+
+  void publishLandmarksAsCallback(const okvis::Time &t,
+                            const okvis::MapPointVector &landmark_vector,
+                            const okvis::MapPointVector &transferred_lm_vector) // marginalized landmarks
+  {
+      for (auto lm : landmark_vector)
+      {
+          fp2 << lm.id << ", " << lm.point[0]/lm.point[3] << ", " << lm.point[1]/lm.point[3] << ", " <<
+                 lm.point[2]/lm.point[3] << ", "  << lm.quality << ", " << lm.distance << endl;
+      }
+
+  }
+
+
   // this we can register as a callback, so will run whether a new state is estimated
   void publishFullStateAsCallback(
       const okvis::Time & /*t*/, const okvis::kinematics::Transformation & T_WS, // T_WS is pose
@@ -1314,6 +1328,20 @@ int main(int argc, char **argv)
                 std::placeholders::_3, std::placeholders::_4));
   //So the function returned still have 4 variables
 
+
+  filename << starttime.tv_sec << "result_landmark.txt";
+  fp2.open(filename.str(), ios::out);
+  if(!fp2){
+      cout<<"Fail to open file: "<<endl;
+      std::cin.get();
+  }
+
+  fp2 << "id, v[0], v[1], v[2], quality, distance" << endl;
+  okvis_estimator.setLandmarksCallback(
+      std::bind(&PoseViewer::publishLandmarksAsCallback, &poseViewer,
+                std::placeholders::_1, std::placeholders::_2,
+                std::placeholders::_3));
+
   //indicates whether the addMeasurement() functions
   //should return immediately (blocking=false), or only when the processing is complete.
 
@@ -1405,7 +1433,7 @@ int main(int argc, char **argv)
         // check if at the end
         for (size_t i = 0; i < numCameras; ++i) {
           if (cam_iterators[i] == image_names[i].end()) {
-            fp.close();
+            fp.close();fp2.close();
             std::cout << "total_length_of_travel: " << total_length_of_travel << endl;
             std::cout << std::endl << "Finished. Press any key to exit." << std::endl << std::flush;
             cv::waitKey(0);
@@ -1440,7 +1468,7 @@ int main(int argc, char **argv)
           do {
             if (!std::getline(imu_file, line))
             {
-              fp.close();
+              fp.close(); fp2.close();
               std::cout << "total_length_of_travel: " << total_length_of_travel << endl;
               std::cout << std::endl << "Finished. Press any key to exit." << std::endl << std::flush;
               cv::waitKey(0);

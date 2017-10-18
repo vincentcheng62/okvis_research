@@ -40,6 +40,7 @@
 #include <okvis/kinematics/operators.hpp>
 #include <okvis/kinematics/Transformation.hpp>
 #include <iostream>
+#include <glog/logging.h>
 
 /// \brief okvis Main namespace of this package.
 namespace okvis {
@@ -48,13 +49,14 @@ namespace okvis {
 namespace triangulation {
 
 // Triangulate the intersection of two rays.
-Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1,
-                                const Eigen::Vector3d& e1,
-                                const Eigen::Vector3d& p2,
-                                const Eigen::Vector3d& e2, double sigma,
+Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1, // center of A in A coordinate
+                                const Eigen::Vector3d& e1, // back project direction for keypt A in A coordinate
+                                const Eigen::Vector3d& p2, // center of B in A coordinate
+                                const Eigen::Vector3d& e2, // back project direction for keypt B in A coordinate
+                                double sigma,
                                 bool& isValid, bool& isParallel)
 {
-  isParallel = false; // This should be the default.
+  isParallel = false; // This should be the default, whether e1 and e2 are parallel
   // But parallel and invalid is not the same. Points at infinity are valid and parallel.
   isValid = false; // hopefully this will be reset to true.
 
@@ -95,31 +97,38 @@ Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1,
   if (!invertible)
   {
     isParallel = true; // let's note this.
+    //LOG(INFO) << "The rays are parallel, the landmark will not be initialized";
     // parallel. that's fine. but A is not invertible. so handle it separately.
-    if ((e1.cross(e2)).norm() < 6 * sigma)
+    if ((e1.cross(e2)).norm() < 6 * sigma) // ?? if e1 parallel e2, e1.cross(e2) should be zero
     {
        isValid = true;  // check parallel
     }
+    //Just return the mean of 2 parallel lines with different length (maybe), since no better guess can be done
     return (Eigen::Vector4d((e1[0] + e2[0]) / 2.0, (e1[1] + e2[1]) / 2.0,
                             (e1[2] + e2[2]) / 2.0, 1e-3).normalized());
   }
 
+  //Try to find the intersection pt of 2 rays (i.e. e1 and e2)
+  //The intersection is the mid-pt of the shortest projection from 1 ray to another //A ray can be defined as r=starting_pt+direction_vector*t, for any t
+  //lambda[0] and lambda[1] is the scale factor 't' which makes xm-xn = shortest projection
   Eigen::Vector3d xm = lambda[0] * e1 + p1;
   Eigen::Vector3d xn = lambda[1] * e2 + p2;
   Eigen::Vector3d midpoint = (xm + xn) / 2.0;
 
   // check it
   Eigen::Vector3d error = midpoint - xm;
-  Eigen::Vector3d diff = midpoint - (p1 + 0.5 * t12);
+  Eigen::Vector3d diff = midpoint - (p1 + 0.5 * t12); // diff is the height of the "triangle" for "triangulation"
   const double diff_sq = diff.dot(diff);
-  const double chi2 = error.dot(error) * (1.0 / (diff_sq * sigma * sigma));
+  const double chi2 = error.dot(error) * (1.0 / (diff_sq * sigma * sigma)); //sigma is 1StdDev of error in meter when the ray travels 1m
 
   isValid = true;
   if (chi2 > 9) {
+    LOG(INFO) << "triangulateFast invalid (i.e. chi2 > 9), cannot add landmark";
+    LOG(INFO) << "error: " << error.transpose() << ", diff: " << diff.transpose() << ", sigma: " << sigma << ", chi2: " << chi2;
     isValid = false;  // reject large chi2-errors
   }
 
-  // flip if necessary
+  // flip if necessary78-
   if (diff.dot(e1) < 0) {
     midpoint = (p1 + 0.5 * t12) - diff;
   }

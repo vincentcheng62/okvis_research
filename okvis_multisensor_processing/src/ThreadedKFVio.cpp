@@ -81,8 +81,8 @@ ThreadedKFVio::ThreadedKFVio(okvis::VioParameters& parameters)
       frontend_(parameters.nCameraSystem.numCameras()),
       parameters_(parameters),
       IsImageNormalized_(true),
-      maxImuInputQueueSize_(
-          2 * max_camera_input_queue_size * parameters.imu.rate
+      GammaCorrectionFactor_(3.0f),
+      maxImuInputQueueSize_(2 * max_camera_input_queue_size * parameters.imu.rate
               / parameters.sensors_information.cameraRate)
 {
   setBlocking(false);
@@ -256,7 +256,7 @@ bool ThreadedKFVio::addImage(const okvis::Time & stamp, size_t cameraIndex,
       //Gamma values < 1 will shift the image towards the darker end of the spectrum while
       //gamma values > 1 will make the image appear lighter.
       //e.g. gamma=2 equals to out = sqrt(in/255)*255
-      GammaCorrection(image, normalizedImg, 2.5f);
+      GammaCorrection(image, normalizedImg, GammaCorrectionFactor_);
 
       frame->measurement.image = normalizedImg;
   }

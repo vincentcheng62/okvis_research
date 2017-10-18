@@ -165,6 +165,8 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
   numUncertainMatches_ = 0;
 
   const size_t numA = frameA_->numKeypoints(camIdA_);
+
+  //Should keypoint[index] in frame A be skipped
   skipA_.clear();
   skipA_.resize(numA, false);
   raySigmasA_.resize(numA);
@@ -179,6 +181,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
         Eigen::Matrix<double, Eigen::Dynamic, 2>::Zero(sizeA() * 2, 2);
 
     // do the projections for each keypoint, if applicable
+    // Only initialized landmark will be projected
     for (size_t k = 0; k < numA; ++k)
     {
       uint64_t lm_id = frameA_->landmarkId(camIdA_, k);
@@ -258,6 +261,8 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
     }
   }
   const size_t numB = frameB_->numKeypoints(camIdB_);
+
+  // Should keypoint[index] in frame B be skipped
   skipB_.clear();
   skipB_.reserve(numB);
   raySigmasB_.resize(numB);
