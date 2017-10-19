@@ -124,10 +124,13 @@ bool ReprojectionError<GEOMETRY_T>::EvaluateWithMinimalJacobians(
   measurement_t kp;
   Eigen::Matrix<double, 2, 4> Jh;
   Eigen::Matrix<double, 2, 4> Jh_weighted;
-  if (jacobians != NULL) {
+  if (jacobians != NULL)
+  {
     cameraGeometry_->projectHomogeneous(hp_C, &kp, &Jh);
     Jh_weighted = squareRootInformation_ * Jh;
-  } else {
+  }
+  else
+  {
     cameraGeometry_->projectHomogeneous(hp_C, &kp);
   }
 

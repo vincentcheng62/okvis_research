@@ -122,6 +122,7 @@ int Frame::detect()
 }
 
 // describe keypoints. This uses virtual function calls.
+// Recalculate the keypt angle with reference to gravity direction and call extractor_->compute()
 ///        That's a negligibly small overhead for many detections.
 ///        \param extractionDirection the extraction direction in camera frame
 ///        returns the number of detected points.
@@ -136,7 +137,9 @@ int Frame::describe(const Eigen::Vector3d & extractionDirection)
   Eigen::Vector2d reprojection;
   Eigen::Matrix<double, 2, 3> Jacobian;
   Eigen::Vector2d eg_projected;
-  for (size_t k = 0; k < keypoints_.size(); ++k) {
+
+  for (size_t k = 0; k < keypoints_.size(); ++k)
+  {
     cv::KeyPoint& ckp = keypoints_[k];
     // project ray
     cameraGeometry_->backProject(Eigen::Vector2d(ckp.pt.x, ckp.pt.y), &ep);
@@ -154,6 +157,7 @@ int Frame::describe(const Eigen::Vector3d & extractionDirection)
   landmarkIds_ = std::vector<uint64_t>(keypoints_.size(),0);
   return keypoints_.size();
 }
+
 // describe keypoints. This uses virtual function calls.
 ///        That's a negligibly small overhead for many detections.
 ///        \param extractionDirection the extraction direction in camera frame

@@ -199,7 +199,7 @@ class Estimator : public VioBackendInterface
    * @param[in] numThreads Number of threads.
    * @param[in] verbose Print out optimization progress and result, if true.
    */
-  void optimize(size_t numIter, size_t numThreads = 1, bool verbose = false);
+  void optimize(size_t numIter, size_t numThreads = 1, bool verbose = false, int reportMode=0);
 
   /**
    * @brief Set a time limit for the optimization process.

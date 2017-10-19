@@ -99,11 +99,11 @@ Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1, // center of A in A c
     isParallel = true; // let's note this.
     //LOG(INFO) << "The rays are parallel, the landmark will not be initialized";
     // parallel. that's fine. but A is not invertible. so handle it separately.
-    if ((e1.cross(e2)).norm() < 6 * sigma) // ?? if e1 parallel e2, e1.cross(e2) should be zero
+    if ((e1.cross(e2)).norm() < 6 * sigma) // if it is highly parallel
     {
        isValid = true;  // check parallel
     }
-    //Just return the mean of 2 parallel lines with different length (maybe), since no better guess can be done
+    //Just set the depth to 1000m, since no better guess can be done
     return (Eigen::Vector4d((e1[0] + e2[0]) / 2.0, (e1[1] + e2[1]) / 2.0,
                             (e1[2] + e2[2]) / 2.0, 1e-3).normalized());
   }
@@ -123,12 +123,12 @@ Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1, // center of A in A c
 
   isValid = true;
   if (chi2 > 9) {
-    LOG(INFO) << "triangulateFast invalid (i.e. chi2 > 9), cannot add landmark";
-    LOG(INFO) << "error: " << error.transpose() << ", diff: " << diff.transpose() << ", sigma: " << sigma << ", chi2: " << chi2;
+    //LOG(INFO) << "triangulateFast invalid (i.e. chi2 > 9), cannot add landmark";
+    //LOG(INFO) << "error: " << error.transpose() << ", diff: " << diff.transpose() << ", sigma: " << sigma << ", chi2: " << chi2;
     isValid = false;  // reject large chi2-errors
   }
 
-  // flip if necessary78-
+  // flip if necessary
   if (diff.dot(e1) < 0) {
     midpoint = (p1 + 0.5 * t12) - diff;
   }

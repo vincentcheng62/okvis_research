@@ -146,7 +146,7 @@ class VioBackendInterface {
    * @param[in] numThreads Number of threads.
    * @param[in] verbose Print out optimization progress and result, if true.
    */
-  virtual void optimize(size_t numIter, size_t numThreads = 1, bool verbose = false) = 0;
+  virtual void optimize(size_t numIter, size_t numThreads = 1, bool verbose = false, int reportMode=0) = 0;
 
   /**
    * @brief Set a time limit for the optimization process.

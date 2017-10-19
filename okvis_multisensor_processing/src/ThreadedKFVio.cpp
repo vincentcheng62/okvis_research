@@ -567,6 +567,7 @@ void ThreadedKFVio::matchingLoop()
   for (;;)
   {
     //Frame consumer loop content
+    //(1) propagate imu measurement (2) Do detectAndDescribe() (3) Push keypt measurements
       //LOG(INFO) << "frameConsumerLoop: " << counter;
       //counter++;
 
@@ -576,7 +577,8 @@ void ThreadedKFVio::matchingLoop()
         return;
       }
       beforeDetectTimer.start();
-      {  // lock the frame synchronizer
+      {
+        // lock the frame synchronizer
         waitForFrameSynchronizerMutexTimer.start();
         std::lock_guard<std::mutex> lock(frameSynchronizer_mutex_);
         waitForFrameSynchronizerMutexTimer.stop();
@@ -584,7 +586,9 @@ void ThreadedKFVio::matchingLoop()
         addNewFrameToSynchronizerTimer.start();
         multiFrame = frameSynchronizer_.addNewFrame(frame);
         addNewFrameToSynchronizerTimer.stop();
-      }  // unlock frameSynchronizer only now as we can be sure that not two states are added for the same timestamp
+      }
+
+      // unlock frameSynchronizer only now as we can be sure that not two states are added for the same timestamp
       okvis::kinematics::Transformation T_WS;
       okvis::Time lastTimestamp;
       okvis::SpeedAndBias speedAndBiases;
@@ -631,7 +635,8 @@ void ThreadedKFVio::matchingLoop()
       }
 
       // get T_WC(camIndx) for detectAndDescribe()
-      if (estimator_.numFrames() == 0) {
+      if (estimator_.numFrames() == 0)
+      {
         // first frame ever
         bool success = okvis::Estimator::initPoseFromImu(imuData, T_WS);
         {
@@ -648,7 +653,9 @@ void ThreadedKFVio::matchingLoop()
           beforeDetectTimer.stop();
           continue;
         }
-      } else {
+      }
+      else
+      {
         // get old T_WS
         propagationTimer.start();
         okvis::ceres::ImuError::propagation(imuData, parameters_.imu, T_WS,
@@ -660,12 +667,15 @@ void ThreadedKFVio::matchingLoop()
           * (*parameters_.nCameraSystem.T_SC(frame->sensorId));
       beforeDetectTimer.stop();
       detectTimer.start();
+
+      //Using this "imu-estimated" T_WC to do descripe keypt along the gravity direction
       frontend_.detectAndDescribe(frame->sensorId, multiFrame, T_WC, nullptr);
       detectTimer.stop();
       afterDetectTimer.start();
 
       bool push = false;
-      {  // we now tell frame synchronizer that detectAndDescribe is done for MF with our timestamp
+      {
+        // we now tell frame synchronizer that detectAndDescribe is done for MF with our timestamp
         waitForFrameSynchronizerMutexTimer2.start();
         std::lock_guard<std::mutex> lock(frameSynchronizer_mutex_);
         waitForFrameSynchronizerMutexTimer2.stop();
@@ -676,9 +686,12 @@ void ThreadedKFVio::matchingLoop()
   //        LOG(INFO) << "detection completed for multiframe with id "<< multi_frame->id();
           push = true;
         }
-      }  // unlocking frame synchronizer
+      }
+      // unlocking frame synchronizer
       afterDetectTimer.stop();
-      if (push) {
+
+      if (push)
+      {
         // use queue size 1 to propagate a congestion to the _cameraMeasurementsReceived queue
         // and check for termination request
         waitForMatchingThreadTimer.start();
@@ -694,7 +707,11 @@ void ThreadedKFVio::matchingLoop()
     //Frame consumer loop content end
 
 
-
+    //Matching Loop
+    //(1) Add States to parameter and residuals block of mapPtr_
+    //(2) matching (match KeyFrames and lastframe), new landmarks will be established in ransac2d2d
+    //(3) ransac3d2d and 2d2d (remove outliers and init pose in 2d2d)
+    //(4) Push matching result (i.e. which keypt match to which landmarks)
 
     //LOG(INFO) << "matchingLoop: " << counter;
     //counter++;
@@ -748,7 +765,8 @@ void ThreadedKFVio::matchingLoop()
       okvis::Time t0Matching = okvis::Time::now();
       bool asKeyframe = false;
 
-      if (estimator_.addStates(frame, imuData, asKeyframe)) // fill in statesMap_ and mapPtr_, which is used by the solver
+      // fill in statesMap_ and mapPtr_, which is used by the solver
+      if (estimator_.addStates(frame, imuData, asKeyframe))
       {
         lastAddedStateTimestamp_ = frame->timestamp();
         addStateTimer.stop();
@@ -763,21 +781,22 @@ void ThreadedKFVio::matchingLoop()
       // -- matching keypoints, initialising landmarks etc.
       okvis::kinematics::Transformation T_WS;
       estimator_.get_T_WS(frame->id(), T_WS);
-      LOG(INFO) << "T_WS.r() is: " << std::fixed << std::setprecision(16) << T_WS.r()[0] << ", " << T_WS.r()[1] << ", " <<T_WS.r()[2] ;
+      //LOG(INFO) << "T_WS.r() is: " << std::fixed << std::setprecision(16) << T_WS.r()[0] << ", " << T_WS.r()[1] << ", " <<T_WS.r()[2] ;
 
-      Eigen::Vector3d ea = T_WS.C().eulerAngles(0, 1, 2);
-      LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << ea[0] << ", " << ea[1] << ", " << ea[2] ;
+      //Eigen::Vector3d ea = T_WS.C().eulerAngles(0, 1, 2);
+      //LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << ea[0] << ", " << ea[1] << ", " << ea[2] ;
 
 
       matchingTimer.start();
-      //Used the newly proprogated T_WS for matching...
+
+      //T_WS is not used ... (why?)
       frontend_.dataAssociationAndInitialization(estimator_, T_WS, parameters_, // Matching as well as initialization of landmarks and state.
                                                  map_, frame, &asKeyframe);
       matchingTimer.stop();
 
       if (asKeyframe)
         estimator_.setKeyframe(frame->id(), asKeyframe);
-      if(!blocking_)
+      if (!blocking_)
       {
         double timeLimit = parameters_.optimization.timeLimitForMatchingAndOptimization
                            -(okvis::Time::now()-t0Matching).toSec();
@@ -865,12 +884,22 @@ void ThreadedKFVio::matchingLoop()
     if (matchedFrames_.PopBlocking(&frame_pairs) == false)
       return;
 
+
+    okvis::kinematics::Transformation T_WSt;
+    estimator_.get_T_WS(frame_pairs->id(), T_WSt);
+    LOG(INFO) << "Before Optimization...";
+    LOG(INFO) << "T_WS.r() is: " << std::fixed << std::setprecision(16) << T_WSt.r()[0] << ", " << T_WSt.r()[1] << ", " <<T_WSt.r()[2] ;
+
+    Eigen::Vector3d ea = T_WSt.C().eulerAngles(0, 1, 2);
+    LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << ea[0] << ", " << ea[1] << ", " << ea[2] ;
+
     OptimizationResults result;
     {
       std::lock_guard<std::mutex> l(estimator_mutex_);
       optimizationTimer.start();
       //if(frontend_.isInitialized()){
-        estimator_.optimize(parameters_.optimization.max_iterations, 2, parameters_.optimization.IsVerbose);// max_iter, num_thread, Isverbose
+        estimator_.optimize(parameters_.optimization.max_iterations, 2,
+                            parameters_.optimization.IsVerbose, 2);// max_iter, num_thread, Isverbose
       //}
       /*if (estimator_.numFrames() > 0 && !frontend_.isInitialized()){
         // undo translation
@@ -891,8 +920,7 @@ void ThreadedKFVio::matchingLoop()
       optimizationTimer.stop();
 
       // get timestamp of last frame in IMU window. Need to do this before marginalization as it will be removed there (if not keyframe)
-      if (estimator_.numFrames()
-          > size_t(parameters_.optimization.numImuFrames))
+      if (estimator_.numFrames() > size_t(parameters_.optimization.numImuFrames))
       {
         deleteImuMeasurementsUntil = estimator_.multiFrame(
             estimator_.frameIdByAge(parameters_.optimization.numImuFrames))
@@ -902,12 +930,19 @@ void ThreadedKFVio::matchingLoop()
       marginalizationTimer.start();
       estimator_.applyMarginalizationStrategy(
           parameters_.optimization.numKeyframes,
-          parameters_.optimization.numImuFrames, result.transferredLandmarks);
+          parameters_.optimization.numImuFrames, result.transferredLandmarks); // transferredLandmarks save the removed landmarks
       marginalizationTimer.stop();
       afterOptimizationTimer.start();
 
       // now actually remove measurements
       deleteImuMeasurements(deleteImuMeasurementsUntil);
+
+      estimator_.get_T_WS(frame_pairs->id(), T_WSt);
+      LOG(INFO) << "After Optimization...";
+      LOG(INFO) << "T_WS.r() is: " << std::fixed << std::setprecision(16) << T_WSt.r()[0] << ", " << T_WSt.r()[1] << ", " <<T_WSt.r()[2] ;
+
+      ea = T_WSt.C().eulerAngles(0, 1, 2);
+      LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << ea[0] << ", " << ea[1] << ", " << ea[2] ;
 
       // saving optimized state and saving it in OptimizationResults struct
       {
@@ -1110,10 +1145,10 @@ void ThreadedKFVio::imuConsumerLoop()
       {
         result.vector_of_T_SCi.push_back(
             okvis::kinematics::Transformation(
-                *parameters_.nCameraSystem.T_SC(i)));
+                *parameters_.nCameraSystem.T_SC(i))); // just the calibrated result, not update at all!
       }
       result.onlyPublishLandmarks = false;
-      optimizationResults_.PushNonBlockingDroppingIfFull(result,1); // Push to the queue. If full, drop the oldest entry.
+      optimizationResults_.PushNonBlockingDroppingIfFull(result,1); // Push to the queue. If full, drop the oldest entry., max queue size is 1
     }
     processImuTimer.stop();
   }
@@ -1270,7 +1305,8 @@ void ThreadedKFVio::optimizationLoop() {
       std::lock_guard<std::mutex> l(estimator_mutex_);
       optimizationTimer.start();
       //if(frontend_.isInitialized()){
-        estimator_.optimize(parameters_.optimization.max_iterations, 2, parameters_.optimization.IsVerbose); // max_iter, num_thread, Isverbose
+        estimator_.optimize(parameters_.optimization.max_iterations, 2,
+                            parameters_.optimization.IsVerbose, 1); // max_iter, num_thread, Isverbose
       //}
       /*if (estimator_.numFrames() > 0 && !frontend_.isInitialized()){
         // undo translation
@@ -1416,6 +1452,8 @@ void ThreadedKFVio::publisherLoop()
     if (fullStateCallback_ && !result.onlyPublishLandmarks)
       fullStateCallback_(result.stamp, result.T_WS, result.speedAndBiases,
                          result.omega_S);
+
+    //The extrinsic is the online calibration betwen camera and imu
     if (fullStateCallbackWithExtrinsics_ && !result.onlyPublishLandmarks)
       fullStateCallbackWithExtrinsics_(result.stamp, result.T_WS,
                                        result.speedAndBiases, result.omega_S,

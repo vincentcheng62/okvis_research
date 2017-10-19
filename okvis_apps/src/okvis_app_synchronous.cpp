@@ -751,24 +751,32 @@ class PoseViewer
     showing_ = false;
   }
 
+  const int publishlmfreq = 20;
+  int publishlmcounter = 0;
   void publishLandmarksAsCallback(const okvis::Time &t,
                             const okvis::MapPointVector &landmark_vector,
                             const okvis::MapPointVector &transferred_lm_vector) // marginalized landmarks
   {
-      for (auto lm : landmark_vector)
+      if(publishlmcounter%publishlmfreq==0)
       {
-          fp2 << lm.id << ", " << lm.point[0]/lm.point[3] << ", " << lm.point[1]/lm.point[3] << ", " <<
-                 lm.point[2]/lm.point[3] << ", "  << lm.quality << ", " << lm.distance << endl;
+          for (auto lm : landmark_vector)
+          {
+              fp2 << lm.id << ", " << lm.point[0]/lm.point[3] << ", " << lm.point[1]/lm.point[3] << ", " <<
+                     lm.point[2]/lm.point[3] << ", "  << lm.quality << ", " << lm.distance << endl;
+          }
       }
-
+      publishlmcounter++;
   }
 
 
   // this we can register as a callback, so will run whether a new state is estimated
   void publishFullStateAsCallback(
-      const okvis::Time & /*t*/, const okvis::kinematics::Transformation & T_WS, // T_WS is pose
+      const okvis::Time &t,
+      const okvis::kinematics::Transformation & T_WS, // T_WS is pose
       const Eigen::Matrix<double, 9, 1> & speedAndBiases,
-      const Eigen::Matrix<double, 3, 1> & /*omega_S*/)
+      const Eigen::Matrix<double, 3, 1> &omega_S ,
+      const std::vector<okvis::kinematics::Transformation,
+              Eigen::aligned_allocator<okvis::kinematics::Transformation> > extrinsic)
   {
 
     // just append the path
@@ -846,6 +854,8 @@ class PoseViewer
     Eigen::Vector3d ea = C.eulerAngles(0, 1, 2);
     fp << ea[0] << ", " << ea[1] << ", " << ea[2] << ", ";
     fp << speedAndBiases[0] << ", " << speedAndBiases[1] << ", " << speedAndBiases[2] << endl;
+
+    //fp << extrinsic.back().T() << endl;;
 
     drawing_ = false; // notify
   }
@@ -1322,10 +1332,10 @@ int main(int argc, char **argv)
 
 
 
-  okvis_estimator.setFullStateCallback(
+  okvis_estimator.setFullStateCallbackWithExtrinsics(
       std::bind(&PoseViewer::publishFullStateAsCallback, &poseViewer,
                 std::placeholders::_1, std::placeholders::_2,
-                std::placeholders::_3, std::placeholders::_4));
+                std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
   //So the function returned still have 4 variables
 
 

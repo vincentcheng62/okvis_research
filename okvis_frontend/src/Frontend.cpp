@@ -82,10 +82,12 @@ Frontend::Frontend(size_t numCameras)
       briskMatchingRatioThreshold_(3.0),
       matcher_(
           std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(4, 4, true))), // default 4: 4 matcher threads
-      keyframeInsertionOverlapThreshold_(0.8), // default 0.6, larger value make more keyframes
-      keyframeInsertionMatchingRatioThreshold_(0.4),//default 0.2, larger value make more keyframes
+      keyframeInsertionOverlapThreshold_(0.6), // default 0.6, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
+      keyframeInsertionMatchingRatioThreshold_(0.2),//default 0.2, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
       rotation_only_ratio_(0.9), // default is 0.8, make it larger so easier to initialize
       ransacinlinersminnumber_(10), // default is 10
+      ransacthreshold_(4), //default is 9, is the reprojection error in pixels?
+      ransac_max_iteration_(1000), //default is 50
       required3d2dmatches_(5), //default is 5
       IsOriginalFeatureDetector_(false)
 
@@ -121,7 +123,14 @@ bool Frontend::detectAndDescribe(size_t cameraIndex,
   // From the paper: better matching result are obtained by extracting descriptors
   // oriented along the gravity direction that is projected into the image
   Eigen::Vector3d g_in_W(0, 0, -1);
+
+  //T_WC maps vector in camera coord to world coord
+  //T_WC.inverse() maps vector in world coord to camera coord
+  //T_WC.inverse().C() maps vector in world coord to some camera coord with correct orientation
+  //T_WC.inverse().C() * g_in_W maps the gravity vector (g_in_W) in world coord to the camera coord with correct orientation
   Eigen::Vector3d extractionDirection = T_WC.inverse().C() * g_in_W;
+
+  //Recalculate the keypt angle with reference to gravity direction and call extractor_->compute()
   frameOut->describe(cameraIndex, extractionDirection);
 
   // set detector/extractor to nullpointer? TODO
@@ -757,8 +766,8 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
           adapter,
           opengv::sac_problems::absolute_pose::FrameAbsolutePoseSacProblem::Algorithm::GP3P));
   ransac.sac_model_ = absposeproblem_ptr;
-  ransac.threshold_ = 9; // threshold angle between measure vector and reprojected vector
-  ransac.max_iterations_ = 1000; // default: 50
+  ransac.threshold_ = ransacthreshold_; // threshold angle between measure vector and reprojected vector
+  ransac.max_iterations_ = ransac_max_iteration_; // default: 50
   // initial guess not needed...
   // run the ransac
   ransac.computeModel(0);
@@ -789,9 +798,10 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
         currentFrame->setLandmarkId(camIdx, keypointIdx, 0);
 
         // remove observation
-        if (removeOutliers) {
-          estimator.removeObservation(lmId, currentFrame->id(), camIdx,
-                                      keypointIdx);
+        if (removeOutliers)
+        {
+          estimator.removeObservation(lmId, currentFrame->id(), camIdx, keypointIdx);
+          //LOG(INFO) << "An outlier observation is removed!!!!!!";
         }
       }
     }
@@ -849,8 +859,8 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
     std::shared_ptr<FrameRotationOnlySacProblem> rotation_only_problem_ptr(
         new FrameRotationOnlySacProblem(adapter));
     rotation_only_ransac.sac_model_ = rotation_only_problem_ptr;
-    rotation_only_ransac.threshold_ = 9;
-    rotation_only_ransac.max_iterations_ = 1000; // default: 50
+    rotation_only_ransac.threshold_ = ransacthreshold_;
+    rotation_only_ransac.max_iterations_ = ransac_max_iteration_; // default: 50
 
     // run the ransac
     rotation_only_ransac.computeModel(0);
@@ -870,8 +880,8 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
             adapter, FrameRelativePoseSacProblem::STEWENIUS));
 
     rel_pose_ransac.sac_model_ = rel_pose_problem_ptr;
-    rel_pose_ransac.threshold_ = 9;     //(1.0 - cos(0.5/600));
-    rel_pose_ransac.max_iterations_ = 1000; // default: 50
+    rel_pose_ransac.threshold_ = ransacthreshold_;     //(1.0 - cos(0.5/600));
+    rel_pose_ransac.max_iterations_ = ransac_max_iteration_; // default: 50
 
     // run the ransac
     rel_pose_ransac.computeModel(0);
@@ -934,8 +944,10 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
         // remove observation
         if (removeOutliers)
         {
-          if (lmId != 0 && estimator.isLandmarkAdded(lmId)){
+          if (lmId != 0 && estimator.isLandmarkAdded(lmId))
+          {
             estimator.removeObservation(lmId, currentFrameId, im, idxB);
+            //LOG(INFO) << "An outlier observation is removed!!!!!!";
           }
         }
       }
@@ -1029,9 +1041,9 @@ void Frontend::initialiseBriskFeatureDetectors()
     {
         featureDetectors_.push_back(
             std::shared_ptr<cv::FeatureDetector>(
-                new cv::GridAdaptedFeatureDetector(
+                new cv::PyramidAdaptedFeatureDetector (new cv::GridAdaptedFeatureDetector(
                 new cv::FastFeatureDetector(briskDetectionThreshold_),
-                    briskDetectionMaximumKeypoints_, 4, 4 ))); // from config file, except the 7x4...
+                    briskDetectionMaximumKeypoints_, 4, 4 ), briskDetectionOctaves_))); // from config file, except the 7x4...
 
     }
 

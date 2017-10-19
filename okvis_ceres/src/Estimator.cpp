@@ -196,7 +196,7 @@ bool Estimator::addStates(
 
   // initialize new sensor states
   // cameras:
-  for (size_t i = 0; i < extrinsicsEstimationParametersVec_.size(); ++i)
+  for (size_t i = 0; i < extrinsicsEstimationParametersVec_.size(); ++i)// for # of cameras
   {
     SpecificSensorStatesContainer cameraInfos(2);
     cameraInfos.at(CameraSensorStates::T_SCi).exists=true;
@@ -255,7 +255,7 @@ bool Estimator::addStates(
     //mapPtr_->isJacobianCorrect(id2,1.0e-6);
 
     // sensor states
-    for (size_t i = 0; i < extrinsicsEstimationParametersVec_.size(); ++i)
+    for (size_t i = 0; i < extrinsicsEstimationParametersVec_.size(); ++i) // for # of cameras
     {
       double translationStdev = extrinsicsEstimationParametersVec_.at(i).sigma_absolute_translation;
       double translationVariance = translationStdev*translationStdev;
@@ -299,18 +299,21 @@ bool Estimator::addStates(
       //mapPtr_->isJacobianCorrect(id,1.0e-6);
     }
   }
+
+  // statesMap_.size() > 1
   else
   {
     // add IMU error terms
     for (size_t i = 0; i < imuParametersVec_.size(); ++i)
     {
       std::shared_ptr<ceres::ImuError> imuError(
+                  //Non linear ImuError, 15 residuals
           new ceres::ImuError(imuMeasurements, imuParametersVec_.at(i),
                               lastElementIterator->second.timestamp,
                               states.timestamp));
       /*::ceres::ResidualBlockId id = */mapPtr_->addResidualBlock(
-          imuError,
-          NULL,
+          imuError, // cost function
+          NULL, // lost function
           mapPtr_->parameterBlockPtr(lastElementIterator->second.id),
           mapPtr_->parameterBlockPtr(
               lastElementIterator->second.sensors.at(SensorStates::Imu).at(i).at(
@@ -325,7 +328,7 @@ bool Estimator::addStates(
     }
 
     // add relative sensor state errors
-    for (size_t i = 0; i < extrinsicsEstimationParametersVec_.size(); ++i)
+    for (size_t i = 0; i < extrinsicsEstimationParametersVec_.size(); ++i) // for # of cameras
     {
       if(lastElementIterator->second.sensors.at(SensorStates::Camera).at(i).at(CameraSensorStates::T_SCi).id !=
           states.sensors.at(SensorStates::Camera).at(i).at(CameraSensorStates::T_SCi).id)
@@ -339,12 +342,14 @@ bool Estimator::addStates(
         double rotationSigmaC = extrinsicsEstimationParametersVec_.at(i)
             .sigma_c_relative_orientation;
         double rotationVariance = rotationSigmaC * rotationSigmaC * dt;
+
+        //ceres::RelativePoseError ->Relative error between two poses. 6 residuals
         std::shared_ptr<ceres::RelativePoseError> relativeExtrinsicsError(
             new ceres::RelativePoseError(translationVariance,
                                          rotationVariance));
         mapPtr_->addResidualBlock(
-            relativeExtrinsicsError,
-            NULL,
+            relativeExtrinsicsError, // cost function
+            NULL, // lost function
             mapPtr_->parameterBlockPtr(
                 lastElementIterator->second.sensors.at(SensorStates::Camera).at(
                     i).at(CameraSensorStates::T_SCi).id),
@@ -471,7 +476,8 @@ bool Estimator::applyMarginalizationStrategy(
   }
 
   // remove linear marginalizationError, if existing
-  if (marginalizationErrorPtr_ && marginalizationResidualId_) {
+  if (marginalizationErrorPtr_ && marginalizationResidualId_)
+  {
     bool success = mapPtr_->removeResidualBlock(marginalizationResidualId_);
     OKVIS_ASSERT_TRUE_DBG(Exception, success,
                        "could not remove marginalization error");
@@ -524,52 +530,70 @@ bool Estimator::applyMarginalizationStrategy(
       }
       std::map<uint64_t, States>::iterator checkit = it;
       checkit++;
+
       // only get rid of it, if it's different
       if(checkit->second.global[i].exists &&
           checkit->second.global[i].id == it->second.global[i].id){
         continue;
       }
+
       it->second.global[i].exists = false; // remember we removed
       paremeterBlocksToBeMarginalized.push_back(it->second.global[i].id);
       keepParameterBlocks.push_back(false);
       ceres::Map::ResidualBlockCollection residuals = mapPtr_->residuals(
           it->second.global[i].id);
-      for (size_t r = 0; r < residuals.size(); ++r) {
+
+      for (size_t r = 0; r < residuals.size(); ++r)
+      {
         std::shared_ptr<ceres::ReprojectionErrorBase> reprojectionError =
             std::dynamic_pointer_cast<ceres::ReprojectionErrorBase>(
             residuals[r].errorInterfacePtr);
+
         if(!reprojectionError){   // we make sure no reprojection errors are yet included.
           marginalizationErrorPtr_->addResidualBlock(residuals[r].residualBlockId);
         }
+
       }
     }
+
     // add all error terms of the sensor states.
-    for (size_t i = 0; i < it->second.sensors.size(); ++i) {
-      for (size_t j = 0; j < it->second.sensors[i].size(); ++j) {
-        for (size_t k = 0; k < it->second.sensors[i][j].size(); ++k) {
-          if (i == SensorStates::Camera && k == CameraSensorStates::T_SCi) {
+    for (size_t i = 0; i < it->second.sensors.size(); ++i)
+    {
+      for (size_t j = 0; j < it->second.sensors[i].size(); ++j)
+      {
+        for (size_t k = 0; k < it->second.sensors[i][j].size(); ++k)
+        {
+          if (i == SensorStates::Camera && k == CameraSensorStates::T_SCi)
+          {
             continue; // we do not remove the extrinsics pose here.
           }
+
           if (!it->second.sensors[i][j][k].exists) {
             continue;
           }
+
           if (mapPtr_->parameterBlockPtr(it->second.sensors[i][j][k].id)
               ->fixed()) {
             continue;  // we never eliminate fixed blocks.
           }
+
           std::map<uint64_t, States>::iterator checkit = it;
           checkit++;
+
           // only get rid of it, if it's different
           if(checkit->second.sensors[i][j][k].exists &&
               checkit->second.sensors[i][j][k].id == it->second.sensors[i][j][k].id){
             continue;
           }
+
           it->second.sensors[i][j][k].exists = false; // remember we removed
           paremeterBlocksToBeMarginalized.push_back(it->second.sensors[i][j][k].id);
           keepParameterBlocks.push_back(false);
           ceres::Map::ResidualBlockCollection residuals = mapPtr_->residuals(
               it->second.sensors[i][j][k].id);
-          for (size_t r = 0; r < residuals.size(); ++r) {
+
+          for (size_t r = 0; r < residuals.size(); ++r)
+          {
             std::shared_ptr<ceres::ReprojectionErrorBase> reprojectionError =
                 std::dynamic_pointer_cast<ceres::ReprojectionErrorBase>(
                 residuals[r].errorInterfacePtr);
@@ -577,18 +601,21 @@ bool Estimator::applyMarginalizationStrategy(
               marginalizationErrorPtr_->addResidualBlock(residuals[r].residualBlockId);
             }
           }
+
         }
       }
     }
   }
   // marginalize ONLY pose now:
   bool reDoFixation = false;
-  for(size_t k = 0; k<removeFrames.size(); ++k){
+  for(size_t k = 0; k<removeFrames.size(); ++k)
+  {
     std::map<uint64_t, States>::iterator it = statesMap_.find(removeFrames[k]);
 
     // schedule removal - but always keep the very first frame.
     //if(it != statesMap_.begin()){
-    if(true){ /////DEBUG
+    if(true)
+    { /////DEBUG
       it->second.global[GlobalStates::T_WS].exists = false; // remember we removed
       paremeterBlocksToBeMarginalized.push_back(it->second.global[GlobalStates::T_WS].id);
       keepParameterBlocks.push_back(false);
@@ -598,7 +625,8 @@ bool Estimator::applyMarginalizationStrategy(
     ceres::Map::ResidualBlockCollection residuals = mapPtr_->residuals(
         it->second.global[GlobalStates::T_WS].id);
 
-    for (size_t r = 0; r < residuals.size(); ++r) {
+    for (size_t r = 0; r < residuals.size(); ++r)
+    {
       if(std::dynamic_pointer_cast<ceres::PoseError>(
            residuals[r].errorInterfacePtr)){ // avoids linearising initial pose error
 				mapPtr_->removeResidualBlock(residuals[r].residualBlockId);
@@ -608,6 +636,7 @@ bool Estimator::applyMarginalizationStrategy(
       std::shared_ptr<ceres::ReprojectionErrorBase> reprojectionError =
           std::dynamic_pointer_cast<ceres::ReprojectionErrorBase>(
           residuals[r].errorInterfacePtr);
+
       if(!reprojectionError){   // we make sure no reprojection errors are yet included.
         marginalizationErrorPtr_->addResidualBlock(residuals[r].residualBlockId);
       }
@@ -615,28 +644,34 @@ bool Estimator::applyMarginalizationStrategy(
 
     // add remaining error terms of the sensor states.
     size_t i = SensorStates::Camera;
-    for (size_t j = 0; j < it->second.sensors[i].size(); ++j) {
+    for (size_t j = 0; j < it->second.sensors[i].size(); ++j)
+    {
       size_t k = CameraSensorStates::T_SCi;
       if (!it->second.sensors[i][j][k].exists) {
         continue;
       }
+
       if (mapPtr_->parameterBlockPtr(it->second.sensors[i][j][k].id)
           ->fixed()) {
         continue;  // we never eliminate fixed blocks.
       }
+
       std::map<uint64_t, States>::iterator checkit = it;
       checkit++;
+
       // only get rid of it, if it's different
       if(checkit->second.sensors[i][j][k].exists &&
           checkit->second.sensors[i][j][k].id == it->second.sensors[i][j][k].id){
         continue;
       }
+
       it->second.sensors[i][j][k].exists = false; // remember we removed
       paremeterBlocksToBeMarginalized.push_back(it->second.sensors[i][j][k].id);
       keepParameterBlocks.push_back(false);
       ceres::Map::ResidualBlockCollection residuals = mapPtr_->residuals(
           it->second.sensors[i][j][k].id);
-      for (size_t r = 0; r < residuals.size(); ++r) {
+      for (size_t r = 0; r < residuals.size(); ++r)
+      {
         std::shared_ptr<ceres::ReprojectionErrorBase> reprojectionError =
             std::dynamic_pointer_cast<ceres::ReprojectionErrorBase>(
             residuals[r].errorInterfacePtr);
@@ -652,7 +687,8 @@ bool Estimator::applyMarginalizationStrategy(
 
     {
       for(PointMap::iterator pit = landmarksMap_.begin();
-          pit != landmarksMap_.end(); ){
+          pit != landmarksMap_.end(); )
+      {
 
         ceres::Map::ResidualBlockCollection residuals = mapPtr_->residuals(pit->first);
 
@@ -664,17 +700,20 @@ bool Estimator::applyMarginalizationStrategy(
         bool errorTermAdded = false;
         std::map<uint64_t,bool> visibleInFrame;
         size_t obsCount = 0;
-        for (size_t r = 0; r < residuals.size(); ++r) {
+        for (size_t r = 0; r < residuals.size(); ++r)
+        {
           std::shared_ptr<ceres::ReprojectionErrorBase> reprojectionError =
               std::dynamic_pointer_cast<ceres::ReprojectionErrorBase>(
                   residuals[r].errorInterfacePtr);
-          if (reprojectionError) {
+          if (reprojectionError)
+          {
             uint64_t poseId = mapPtr_->parameters(residuals[r].residualBlockId).at(0).first;
             // since we have implemented the linearisation to account for robustification,
             // we don't kick out bad measurements here any more like
             // if(vectorContains(allLinearizedFrames,poseId)){ ...
             //   if (error.transpose() * error > 6.0) { ... removeObservation ... }
             // }
+
             if(vectorContains(removeFrames,poseId)){
               skipLandmark = false;
             }
@@ -702,46 +741,59 @@ bool Estimator::applyMarginalizationStrategy(
         }
 
         // so, we need to consider it.
-        for (size_t r = 0; r < residuals.size(); ++r) {
+        for (size_t r = 0; r < residuals.size(); ++r)
+        {
           std::shared_ptr<ceres::ReprojectionErrorBase> reprojectionError =
               std::dynamic_pointer_cast<ceres::ReprojectionErrorBase>(
                   residuals[r].errorInterfacePtr);
-          if (reprojectionError) {
+
+          if (reprojectionError)
+          {
             uint64_t poseId = mapPtr_->parameters(residuals[r].residualBlockId).at(0).first;
             if((vectorContains(removeFrames,poseId) && hasNewObservations) ||
-                (!vectorContains(allLinearizedFrames,poseId) && marginalize)){
+                (!vectorContains(allLinearizedFrames,poseId) && marginalize))
+            {
               // ok, let's ignore the observation.
               removeObservation(residuals[r].residualBlockId);
               residuals.erase(residuals.begin() + r);
               r--;
-            } else if(marginalize && vectorContains(allLinearizedFrames,poseId)) {
+            }
+            else if(marginalize && vectorContains(allLinearizedFrames,poseId))
+            {
               // TODO: consider only the sensible ones for marginalization
               if(obsCount<2){ //visibleInFrame.size()
                 removeObservation(residuals[r].residualBlockId);
                 residuals.erase(residuals.begin() + r);
                 r--;
-              } else {
+              }
+              else
+              {
                 // add information to be considered in marginalization later.
                 errorTermAdded = true;
                 marginalizationErrorPtr_->addResidualBlock(
                     residuals[r].residualBlockId, false);
               }
             }
+
             // check anything left
-            if (residuals.size() == 0) {
+            if (residuals.size() == 0)
+            {
               justDelete = true;
               marginalize = false;
             }
           }
         }
 
-        if(justDelete){
+        if(justDelete)
+        {
           mapPtr_->removeParameterBlock(pit->first);
           removedLandmarks.push_back(pit->second);
           pit = landmarksMap_.erase(pit);
           continue;
         }
-        if(marginalize&&errorTermAdded){
+
+        if(marginalize&&errorTermAdded)
+        {
           paremeterBlocksToBeMarginalized.push_back(pit->first);
           keepParameterBlocks.push_back(false);
           removedLandmarks.push_back(pit->second);
@@ -755,7 +807,8 @@ bool Estimator::applyMarginalizationStrategy(
 
     // update book-keeping and go to the next frame
     //if(it != statesMap_.begin()){ // let's remember that we kept the very first pose
-    if(true) { ///// DEBUG
+    if(true)
+    { ///// DEBUG
       multiFramePtrMap_.erase(it->second.id);
       statesMap_.erase(it->second.id);
     }
@@ -787,7 +840,8 @@ bool Estimator::applyMarginalizationStrategy(
     return false;
   }
 	
-	if(reDoFixation){
+    if(reDoFixation)
+    {
 	  // finally fix the first pose properly
 		//mapPtr_->resetParameterization(statesMap_.begin()->first, ceres::Map::Pose3d);
 		okvis::kinematics::Transformation T_WS_0;
@@ -870,9 +924,11 @@ bool Estimator::initPoseFromImu(
 }
 
 // Start ceres optimization.
+// Also update landmarks quality and position after that
+// reportMode: 0(No report), 1(Brief report), 2(Full report)
 #ifdef USE_OPENMP
 void Estimator::optimize(size_t numIter, size_t numThreads,
-                                 bool verbose)
+                                 bool verbose, int reportMode)
 #else
 void Estimator::optimize(size_t numIter, size_t /*numThreads*/,
                                  bool verbose) // avoid warning since numThreads unused
@@ -904,11 +960,7 @@ void Estimator::optimize(size_t numIter, size_t /*numThreads*/,
 #endif
   mapPtr_->options.max_num_iterations = numIter;
 
-  if (verbose) {
-    mapPtr_->options.minimizer_progress_to_stdout = true;
-  } else {
-    mapPtr_->options.minimizer_progress_to_stdout = false;
-  }
+  mapPtr_->options.minimizer_progress_to_stdout = verbose;
 
   // call solver
   mapPtr_->solve();
@@ -919,19 +971,24 @@ void Estimator::optimize(size_t numIter, size_t /*numThreads*/,
     {
       Eigen::MatrixXd H(3,3);
 
-      //it->first is the index
+      //it->first is the index of the landmark
       mapPtr_->getLhs(it->first,H); // getLhs: Obtain the Hessian block for a specific parameter block.
       Eigen::SelfAdjointEigenSolver< Eigen::Matrix3d > saes(H);
       Eigen::Vector3d eigenvalues = saes.eigenvalues();
       const double smallest = (eigenvalues[0]);
       const double largest = (eigenvalues[2]);
 
-      //it->second is the MapPoint
-      if(smallest<1.0e-12){
+      //it->second is the MapPoint of the landmark
+      if(smallest<1.0e-12)
+      {
         // this means, it has a non-observable depth
         it->second.quality = 0.0;
-      } else {
+      }
+      else
+      {
         // OK, well constrained
+        // a good landmark is where the 3 observartions can give pretty much information, so will
+        // biased to a single observation
         it->second.quality = sqrt(smallest)/sqrt(largest);
       }
 
@@ -942,9 +999,34 @@ void Estimator::optimize(size_t numIter, size_t /*numThreads*/,
   }
 
   // summary output
-  if (verbose) {
-    LOG(INFO) << mapPtr_->summary.FullReport();
+  if (verbose)
+  {
+    if(reportMode>0)
+    {
+        if(reportMode == 1)
+            LOG(INFO) << mapPtr_->summary.BriefReport();
+        else
+            LOG(INFO) << mapPtr_->summary.FullReport();
+    }
+
   }
+
+  //Reduced problem is:
+  // the problem after the inactive
+  // and constant parameter blocks have been removed. A parameter
+  // block is inactive if no residual block refers to it.
+
+  //Output the block size data for debugging
+  LOG(INFO) << "# Para block: (" << mapPtr_->summary.num_parameter_blocks << ", " << mapPtr_->summary.num_parameter_blocks_reduced << ")";
+  LOG(INFO) << "# Parameters: (" << mapPtr_->summary.num_parameters << ", " << mapPtr_->summary.num_parameters_reduced << ")";
+
+  // effective_parameters: Dimension of the tangent space of the problem (or the number of
+  // columns in the Jacobian for the problem). This is different
+  // from num_parameters if a parameter block is associated with a
+  // LocalParameterization
+  LOG(INFO) << "# Effective Paras: (" << mapPtr_->summary.num_effective_parameters << ", " << mapPtr_->summary.num_effective_parameters_reduced << ")";
+  LOG(INFO) << "# Residual block: (" << mapPtr_->summary.num_residual_blocks << ", " << mapPtr_->summary.num_residual_blocks_reduced << ")";
+  LOG(INFO) << "# Residuals: (" << mapPtr_->summary.num_residuals << ", " << mapPtr_->summary.num_residuals_reduced << ")";
 }
 
 // Set a time limit for the optimization process.
@@ -1003,13 +1085,19 @@ size_t Estimator::getLandmarks(PointMap & landmarks) const
 
 // Get a copy of all the landmark in a MapPointVector. This is for legacy support.
 // Use getLandmarks(okvis::PointMap&) if possible.
+// Only called to publish the result
 size_t Estimator::getLandmarks(MapPointVector & landmarks) const
 {
   std::lock_guard<std::mutex> l(statesMutex_);
   landmarks.clear();
-  landmarks.reserve(landmarksMap_.size());
-  for(PointMap::const_iterator it=landmarksMap_.begin(); it!=landmarksMap_.end(); ++it){
-    landmarks.push_back(it->second);
+  //landmarks.reserve(landmarksMap_.size());
+
+  for(PointMap::const_iterator it=landmarksMap_.begin(); it!=landmarksMap_.end(); ++it)
+  {
+    if(isLandmarkInitialized(it->first))
+    {
+        landmarks.push_back(it->second);
+    }
   }
   return landmarksMap_.size();
 }
@@ -1115,7 +1203,7 @@ bool Estimator::setCameraSensorStates(
       poseId, cameraIdx, SensorStates::Camera, CameraSensorStates::T_SCi, T_SCi);
 }
 
-// Set the homogeneous coordinates for a landmark.
+// Set the homogeneous coordinates for a landmark. will be called in setBestmatch()
 bool Estimator::setLandmark(
     uint64_t landmarkId, const Eigen::Vector4d & landmark)
 {

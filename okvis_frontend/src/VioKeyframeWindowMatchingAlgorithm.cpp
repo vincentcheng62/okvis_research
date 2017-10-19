@@ -448,7 +448,8 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
 
     // get the uncertainty
     if (canBeInitialized)
-    {  // know more exactly
+    {
+      // know more exactly, but pointUOplus_A seems to have no usage
       Eigen::Matrix3d pointUOplus_A;
       probabilisticStereoTriangulator_.getUncertainty(indexA, indexB, hP_Ca,
                                                       pointUOplus_A,
@@ -496,7 +497,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
     // add landmark to graph if necessary
     if (insertHomogeneousPointParameterBlock)
     {
-      estimator_->addLandmark(lmId, T_WCa_ * hP_Ca);
+      estimator_->addLandmark(lmId, T_WCa_ * hP_Ca); // mapPtr_->addParameterBlock() which will be used in ceres
       OKVIS_ASSERT_TRUE(Exception, estimator_->isLandmarkAdded(lmId),
                         lmId<<" not added, bug");
       estimator_->setLandmarkInitialized(lmId, canBeInitialized);
@@ -575,6 +576,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
     const double chi2 = err.transpose().eval() * U_tot.inverse() * err;
 
     if (chi2 > 4.0) {
+        LOG(INFO) << "In 3d-2d setBestMatch, chi2=" << chi2 << " >4.0, cannot set landmark in current frame";
       return;
     }
 

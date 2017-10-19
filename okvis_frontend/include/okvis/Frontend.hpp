@@ -278,6 +278,8 @@ class Frontend : public VioFrontendInterface {
 
   double rotation_only_ratio_; ///< the threshold ratio for rotation only ransac such that beyond that will think it is orientation only
   size_t ransacinlinersminnumber_;   ///< the inliner threshold for
+  size_t ransacthreshold_;   ///< the ransac threshold
+  size_t ransac_max_iteration_; ///< the maximum iteration ransac3d2d/2d2d will perform
   size_t required3d2dmatches_;
 
   /**

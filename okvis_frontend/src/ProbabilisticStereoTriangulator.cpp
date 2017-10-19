@@ -195,7 +195,10 @@ bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::stereoTriangulate(
       keypointCoordinatesB, &backProjectionDirectionB_inA);  // direction in frame B
   backProjectionDirectionB_inA = T_AB_.C() * backProjectionDirectionB_inA;
 
-  //Check whether the 2 light rays are parallel, if so, triangulation result may be inaccurate
+  // Check whether the 2 light rays are parallel, if so, triangulation result may be inaccurate
+  // But it is possible that they are parallel but valid
+  // So the landmark will not be initialized but set the depth to 1000m
+  // hpA is the output triangulated homogenous point of A in A coordinate
   Eigen::Vector4d hpA = triangulateFast(
       Eigen::Vector3d(0, 0, 0),  // center of A in A coordinates (0,0,0)
       backProjectionDirectionA_inA.normalized(), T_AB_.r(),  // center of B in A coordinates
@@ -211,20 +214,20 @@ bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::stereoTriangulate(
   isValid = computeReprojectionError4(frameA_, camIdA_, keypointIdxA, hpA,
                                       errA);
   if (!isValid) {
-    LOG(INFO) << "computeReprojectionError4 for frameA is invalid, cannot add landmark";
+    //LOG(INFO) << "computeReprojectionError4 for frameA is invalid, cannot add landmark";
     return false;
   }
   Eigen::Vector4d outHomogeneousPoint_B = T_BA_ * Eigen::Vector4d(hpA);
   if (!computeReprojectionError4(frameB_, camIdB_, keypointIdxB,
                                  outHomogeneousPoint_B, errB)) {
     isValid = false;
-    LOG(INFO) << "computeReprojectionError4 for frameB is invalid, cannot add landmark";
+    //LOG(INFO) << "computeReprojectionError4 for frameB is invalid, cannot add landmark";
     return false;
   }
 
   //if none of the reprojection error exceed 4 px
   if (errA > 4.0 || errB > 4.0) {
-    LOG(INFO) << "errA > 4.0 || errB > 4.0, cannot add landmark";
+    //LOG(INFO) << "errA=" << errA << " > 4.0 || errB=" << errB  << " > 4.0, cannot add landmark";
     isValid = false;
   }
 
@@ -250,7 +253,7 @@ bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::stereoTriangulate(
     return false;
   }
 
-  // and get the uncertainty /
+  // and get the uncertainty, will not change outHomogeneousPoint_A /
   getUncertainty(keypointIdxA, keypointIdxB, outHomogeneousPoint_A,
                  outPointUOplus_A, outCanBeInitialized);
   outCanBeInitialized &= canBeInitialized; // be conservative -- if the initial one failed, the 2nd should, too...
@@ -258,6 +261,7 @@ bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::stereoTriangulate(
 }
 
 // Get triangulation uncertainty.
+// If the 2 rays not too parallel, judge whether triangulation is trustful
 template<class CAMERA_GEOMETRY_T>
 void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::getUncertainty(
     size_t keypointIdxA, size_t keypointIdxB,
@@ -270,7 +274,7 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::getUncertainty(
   //Eigen::Vector4d& homogeneousPoint_B=_T_BA*homogeneousPoint_A;
   Eigen::Vector4d hPA = homogeneousPoint_A;
 
-  // calculate point uncertainty by constructing the lhs of the Gauss-Newton equation system.
+  // calculate point uncertainty by constructing the lhs of the Gauss-Newton equation system, i.e. the Hessian or the information matrix.
   // note: the transformation T_WA is assumed constant and identity w.l.o.g.
   Eigen::Matrix<double, 9, 9> H = H_;
 
@@ -285,7 +289,7 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::getUncertainty(
   frameA_->getKeypointSize(camIdA_, keypointIdxA, keypointStdDev);
   keypointStdDev = 0.8 * keypointStdDev / 12.0;
   Eigen::Matrix2d inverseMeasurementCovariance = Eigen::Matrix2d::Identity()
-      * (1.0 / (keypointStdDev * keypointStdDev));
+      * (1.0 / (keypointStdDev * keypointStdDev)); // the information matrix
   ::okvis::ceres::ReprojectionError<CAMERA_GEOMETRY_T> reprojectionErrorA(
       frameA_->geometryAs<CAMERA_GEOMETRY_T>(camIdA_), 0, kptA,
       inverseMeasurementCovariance);
@@ -310,6 +314,7 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::getUncertainty(
   reprojectionErrorA.EvaluateWithMinimalJacobians(parametersA, residualA.data(),
                                                   jacobiansA, jacobiansA_min);
 
+  //B's jacobian
   inverseMeasurementCovariance.setIdentity();
   frameB_->getKeypointSize(camIdB_, keypointIdxB, keypointStdDev);
   keypointStdDev = 0.8 * keypointStdDev / 12.0;
@@ -318,6 +323,7 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::getUncertainty(
   ::okvis::ceres::ReprojectionError<CAMERA_GEOMETRY_T> reprojectionErrorB(
       frameB_->geometryAs<CAMERA_GEOMETRY_T>(camIdB_), 0, kptB,
       inverseMeasurementCovariance);
+
   Eigen::Matrix<double, 2, 1> residualB;
   Eigen::Matrix<double, 2, 7, Eigen::RowMajor> J_TB;
   Eigen::Matrix<double, 2, 6, Eigen::RowMajor> J_TB_min;
@@ -338,15 +344,21 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::getUncertainty(
   reprojectionErrorB.EvaluateWithMinimalJacobians(parametersB, residualB.data(),
                                                   jacobiansB, jacobiansB_min);
 
-  // evaluate again closer:
-  hPA.head<3>() = 0.8 * (hPA.head<3>() - T_AB_.r() / 2.0 * hPA[3])
-      + T_AB_.r() / 2.0 * hPA[3];
+  // evaluate again closer ,since parametersB[1] = hPA.data():
+  // 0.8*(vector pointing from mid-pt to hPA)
+  hPA.head<3>() = 0.8 * (hPA.head<3>() - (T_AB_.r() / 2.0) * hPA[3])
+      + (T_AB_.r() / 2.0) * hPA[3];
   reprojectionErrorB.EvaluateWithMinimalJacobians(parametersB, residualB.data(),
                                                   jacobiansB, jacobiansB_min);
+
+  //Residual is the reprojection error (squareRootInformation_ * error)
+  //Moving hPA closer (but not along the line e2) and see if it stills project close to kptB
+  //If so, it is proned to error
+  //Actually residualB remains small means that the 2 rays are still close to parallel, which may produce poor triangulation result
   if (residualB.transpose() * residualB < 4.0)
   {
     outCanBeInitialized = false;
-    LOG(INFO) << "norm(residualB)<4.0, the landmark will not be initialized";
+    //LOG(INFO) << "norm(residualB)= " << residualB.transpose() * residualB << " <4.0, the landmark will not be initialized";
   }
   else
   {
