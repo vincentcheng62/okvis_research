@@ -999,8 +999,8 @@ void Estimator::optimize(size_t numIter, size_t /*numThreads*/,
   }
 
   // summary output
-  if (verbose)
-  {
+//  if (verbose)
+//  {
     if(reportMode>0)
     {
         if(reportMode == 1)
@@ -1009,7 +1009,7 @@ void Estimator::optimize(size_t numIter, size_t /*numThreads*/,
             LOG(INFO) << mapPtr_->summary.FullReport();
     }
 
-  }
+  //}
 
   //Reduced problem is:
   // the problem after the inactive

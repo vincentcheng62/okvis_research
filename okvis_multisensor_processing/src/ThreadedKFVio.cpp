@@ -534,6 +534,11 @@ void ThreadedKFVio::frameConsumerLoop(size_t cameraIndex)
   }
 }
 
+
+double maxdiff_x=0, maxdiff_y=0, maxdiff_z=0, maxdiff_norm=0;
+double avgdiff_x=0, avgdiff_y=0, avgdiff_z=0, avgdiff_norm=0;
+u_int64_t counter=0;
+
 // Loop that matches frames with existing frames.
 void ThreadedKFVio::matchingLoop()
 {
@@ -563,6 +568,7 @@ void ThreadedKFVio::matchingLoop()
   TimerSwitchable processImuTimer("0 processImuMeasurements",true);
 
   clock_t end, begin;
+  bool isInit=false;
   //long long counter=0;
   for (;;)
   {
@@ -765,7 +771,25 @@ void ThreadedKFVio::matchingLoop()
       okvis::Time t0Matching = okvis::Time::now();
       bool asKeyframe = false;
 
+      okvis::kinematics::Transformation T_WS;
+//      if(frame->id()>1)
+//      {
+//          estimator_.get_T_WS(frame->id()-1, T_WS);
+//          LOG(INFO) << "Before estimator_.addStates() ...";
+//          LOG(INFO) << "T_WS.r() is: " << std::fixed << std::setprecision(16) << T_WS.r()[0] << ", " << T_WS.r()[1] << ", " <<T_WS.r()[2] ;
+
+//          Eigen::Vector3d ea = T_WS.C().eulerAngles(0, 1, 2);
+//          LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << ea[0] << ", " << ea[1] << ", " << ea[2] ;
+//      }
+
+
       // fill in statesMap_ and mapPtr_, which is used by the solver
+      // frame contains keypt of current frame, which contains the corresponding landmark ID, so
+      // can calculate reprojection error
+      // imuData let the imu error part can be propagate
+      // During matching, setBestMatch() will addLandMark and setLandMark, which will amend the
+      // corresponding parameter blocks
+      // Immediately after addStates(), estimator_.get_T_WS() will just return an initial guess by imu integration
       if (estimator_.addStates(frame, imuData, asKeyframe))
       {
         lastAddedStateTimestamp_ = frame->timestamp();
@@ -779,18 +803,12 @@ void ThreadedKFVio::matchingLoop()
       }
 
       // -- matching keypoints, initialising landmarks etc.
-      okvis::kinematics::Transformation T_WS;
       estimator_.get_T_WS(frame->id(), T_WS);
-      //LOG(INFO) << "T_WS.r() is: " << std::fixed << std::setprecision(16) << T_WS.r()[0] << ", " << T_WS.r()[1] << ", " <<T_WS.r()[2] ;
-
-      //Eigen::Vector3d ea = T_WS.C().eulerAngles(0, 1, 2);
-      //LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << ea[0] << ", " << ea[1] << ", " << ea[2] ;
-
 
       matchingTimer.start();
 
       //T_WS is not used ... (why?)
-      frontend_.dataAssociationAndInitialization(estimator_, T_WS, parameters_, // Matching as well as initialization of landmarks and state.
+      isInit = frontend_.dataAssociationAndInitialization(estimator_, T_WS, parameters_, // Matching as well as initialization of landmarks and state.
                                                  map_, frame, &asKeyframe);
       matchingTimer.stop();
 
@@ -885,12 +903,12 @@ void ThreadedKFVio::matchingLoop()
       return;
 
 
-    okvis::kinematics::Transformation T_WSt;
+    okvis::kinematics::Transformation T_WSt, T_WSf;
     estimator_.get_T_WS(frame_pairs->id(), T_WSt);
-    LOG(INFO) << "Before Optimization...";
+    LOG(INFO) << "Before Optimization (Just imu integration as initial guess)...";
     LOG(INFO) << "T_WS.r() is: " << std::fixed << std::setprecision(16) << T_WSt.r()[0] << ", " << T_WSt.r()[1] << ", " <<T_WSt.r()[2] ;
 
-    Eigen::Vector3d ea = T_WSt.C().eulerAngles(0, 1, 2);
+    Eigen::Vector3d eaf, ea = T_WSt.C().eulerAngles(0, 1, 2);
     LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << ea[0] << ", " << ea[1] << ", " << ea[2] ;
 
     OptimizationResults result;
@@ -899,7 +917,7 @@ void ThreadedKFVio::matchingLoop()
       optimizationTimer.start();
       //if(frontend_.isInitialized()){
         estimator_.optimize(parameters_.optimization.max_iterations, 2,
-                            parameters_.optimization.IsVerbose, 2);// max_iter, num_thread, Isverbose
+                            parameters_.optimization.IsVerbose, 1);// max_iter, num_thread, Isverbose
       //}
       /*if (estimator_.numFrames() > 0 && !frontend_.isInitialized()){
         // undo translation
@@ -937,19 +955,46 @@ void ThreadedKFVio::matchingLoop()
       // now actually remove measurements
       deleteImuMeasurements(deleteImuMeasurementsUntil);
 
-      estimator_.get_T_WS(frame_pairs->id(), T_WSt);
-      LOG(INFO) << "After Optimization...";
-      LOG(INFO) << "T_WS.r() is: " << std::fixed << std::setprecision(16) << T_WSt.r()[0] << ", " << T_WSt.r()[1] << ", " <<T_WSt.r()[2] ;
-
-      ea = T_WSt.C().eulerAngles(0, 1, 2);
-      LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << ea[0] << ", " << ea[1] << ", " << ea[2] ;
-
       // saving optimized state and saving it in OptimizationResults struct
       {
         std::lock_guard<std::mutex> lock(lastState_mutex_);
         estimator_.get_T_WS(frame_pairs->id(), lastOptimized_T_WS_);
         estimator_.getSpeedAndBias(frame_pairs->id(), 0,
                                    lastOptimizedSpeedAndBiases_);
+
+        if(isInit)
+        {
+            LOG(INFO) << "After Optimization (after reprojection error is involved)...";
+            LOG(INFO) << "T_WS.r() is: " << std::fixed << std::setprecision(16) << lastOptimized_T_WS_.r()[0] << ", " << lastOptimized_T_WS_.r()[1] << ", " <<lastOptimized_T_WS_.r()[2] ;
+
+            eaf = lastOptimized_T_WS_.C().eulerAngles(0, 1, 2);
+            LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << eaf[0] << ", " << eaf[1] << ", " << eaf[2] ;
+
+
+            Eigen::Vector3d T_diff = T_WSt.r()-lastOptimized_T_WS_.r();
+            Eigen::Vector3d C_diff = ea-eaf;
+            LOG(INFO) << "Difference with Optimization...";
+            LOG(INFO) << "Current Speed is: " << lastOptimizedSpeedAndBiases_[0] << ", " << lastOptimizedSpeedAndBiases_[1] << ", " << lastOptimizedSpeedAndBiases_[2];
+            LOG(INFO) << "T_WS.r() is: " << std::fixed << std::setprecision(16) << fabs(T_diff[0]) << ", " << fabs(T_diff[1]) << ", " <<fabs(T_diff[2]) << "   norm= " << T_diff.norm() ;
+            LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << fabs(C_diff[0]) << ", " << fabs(C_diff[1]) << ", " << fabs(C_diff[2]) << "  norm= " << C_diff.norm() ;
+
+            if(fabs(T_diff[0]) > maxdiff_x) maxdiff_x = fabs(T_diff[0]);
+            if(fabs(T_diff[1]) > maxdiff_y) maxdiff_y = fabs(T_diff[1]);
+            if(fabs(T_diff[1]) > maxdiff_z) maxdiff_z = fabs(T_diff[2]);
+            if(T_diff.norm() > maxdiff_norm) maxdiff_norm = T_diff.norm();
+
+            LOG(INFO) << "T_WS.r() max diff so far: " << std::fixed << std::setprecision(16) << maxdiff_x << ", " << maxdiff_y << ", " <<maxdiff_z << "   norm= " << maxdiff_norm ;
+
+            avgdiff_x = (avgdiff_x*counter+maxdiff_x)/(counter+1);
+            avgdiff_y = (avgdiff_y*counter+maxdiff_y)/(counter+1);
+            avgdiff_z = (avgdiff_z*counter+maxdiff_z)/(counter+1);
+            avgdiff_norm = (avgdiff_norm*counter+maxdiff_norm)/(counter+1);
+
+            LOG(INFO) << "T_WS.r() average diff so far: " << std::fixed << std::setprecision(16) << avgdiff_x << ", " << avgdiff_y << ", " <<avgdiff_z << "   norm= " << avgdiff_norm ;
+            counter++;
+        }
+
+
         lastOptimizedStateTimestamp_ = frame_pairs->timestamp();
 
         // if we publish the state after each IMU propagation we do not need to publish it here.

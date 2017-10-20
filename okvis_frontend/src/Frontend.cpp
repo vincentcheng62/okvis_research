@@ -318,7 +318,7 @@ bool Frontend::dataAssociationAndInitialization(
   }
   matchStereoTimer.stop();
 
-  return true;
+  return isInitialized_;
 }
 
 // Propagates pose, speeds and biases with given IMU measurements.
@@ -754,7 +754,7 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
   size_t numCorrespondences = adapter.getNumberCorrespondences();
   if (numCorrespondences < 5)
   {
-    LOG(INFO) << "numCorrespondences: " << numCorrespondences << " < 5";
+    LOG(INFO) << "numCorrespondences: " << numCorrespondences << " < 5, return from 3d2d directly";
     return numCorrespondences;
   }
   // create a RelativePoseSac problem and RANSAC
@@ -776,7 +776,8 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
   numInliers = ransac.inliers_.size();
   LOG(INFO) <<   "numInliers: " << numInliers;
 
-  if (numInliers >= ransacinlinersminnumber_)
+  if (numInliers >= ransacinlinersminnumber_ ||
+          (numInliers >= 6 && (double)numInliers/(double)numCorrespondences > 0.85))
   {
 
     // kick out outliers:
@@ -809,7 +810,7 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
   }
   else
   {
-      LOG(INFO) << "numInliers < ransacinlinersminnumber_, dont kick-out outliers";
+      LOG(INFO) << "numInliers < ransacinlinersminnumber= " << ransacinlinersminnumber_ << ", dont kick-out outliers";
   }
   return numInliers;
 }
