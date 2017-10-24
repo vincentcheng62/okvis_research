@@ -904,12 +904,15 @@ void ThreadedKFVio::matchingLoop()
 
 
     okvis::kinematics::Transformation T_WSt, T_WSf;
+    okvis::SpeedAndBias SAB;
     estimator_.get_T_WS(frame_pairs->id(), T_WSt);
+    estimator_.getSpeedAndBias(frame_pairs->id(), 0, SAB);
     LOG(INFO) << "Before Optimization (Just imu integration as initial guess)...";
     LOG(INFO) << "T_WS.r() is: " << std::fixed << std::setprecision(16) << T_WSt.r()[0] << ", " << T_WSt.r()[1] << ", " <<T_WSt.r()[2] ;
 
     Eigen::Vector3d eaf, ea = T_WSt.C().eulerAngles(0, 1, 2);
     LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << ea[0] << ", " << ea[1] << ", " << ea[2] ;
+    LOG(INFO) << "SpeedAndBias is: " << SAB.transpose();
 
     OptimizationResults result;
     {
@@ -969,7 +972,7 @@ void ThreadedKFVio::matchingLoop()
 
             eaf = lastOptimized_T_WS_.C().eulerAngles(0, 1, 2);
             LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << eaf[0] << ", " << eaf[1] << ", " << eaf[2] ;
-
+            LOG(INFO) << "SpeedAndBias is: " << lastOptimizedSpeedAndBiases_.transpose();
 
             Eigen::Vector3d T_diff = T_WSt.r()-lastOptimized_T_WS_.r();
             Eigen::Vector3d C_diff = ea-eaf;
@@ -985,10 +988,10 @@ void ThreadedKFVio::matchingLoop()
 
             LOG(INFO) << "T_WS.r() max diff so far: " << std::fixed << std::setprecision(16) << maxdiff_x << ", " << maxdiff_y << ", " <<maxdiff_z << "   norm= " << maxdiff_norm ;
 
-            avgdiff_x = (avgdiff_x*counter+maxdiff_x)/(counter+1);
-            avgdiff_y = (avgdiff_y*counter+maxdiff_y)/(counter+1);
-            avgdiff_z = (avgdiff_z*counter+maxdiff_z)/(counter+1);
-            avgdiff_norm = (avgdiff_norm*counter+maxdiff_norm)/(counter+1);
+            avgdiff_x = (avgdiff_x*counter+fabs(T_diff[0]))/(counter+1);
+            avgdiff_y = (avgdiff_y*counter+fabs(T_diff[1]))/(counter+1);
+            avgdiff_z = (avgdiff_z*counter+fabs(T_diff[2]))/(counter+1);
+            avgdiff_norm = (avgdiff_norm*counter+fabs(T_diff.norm()))/(counter+1);
 
             LOG(INFO) << "T_WS.r() average diff so far: " << std::fixed << std::setprecision(16) << avgdiff_x << ", " << avgdiff_y << ", " <<avgdiff_z << "   norm= " << avgdiff_norm ;
             counter++;

@@ -843,18 +843,36 @@ class PoseViewer
     postext << "position = [" << r[0] << ", " << r[1] << ", " << r[2] << "]";
     cv::putText(_image, postext.str(), cv::Point(15,15),
                 cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
+
+    Eigen::Vector3d ea = C.eulerAngles(0, 1, 2);
+
+    std::stringstream rotationtext;
+    rotationtext << "rotation = [" << ea[0]*(180/M_PI) << ", " << ea[1]*(180/M_PI) << ", " << ea[2]*(180/M_PI) << "]";
+    cv::putText(_image, rotationtext.str(), cv::Point(15,35),
+                cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
+
     std::stringstream veltext;
     veltext << "velocity = [" << speedAndBiases[0] << ", " << speedAndBiases[1] << ", " << speedAndBiases[2] << "]";
-    cv::putText(_image, veltext.str(), cv::Point(15,35),
+    cv::putText(_image, veltext.str(), cv::Point(15,55),
+                    cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
+
+    std::stringstream gyrobiastext;
+    gyrobiastext << "gyrobias = [" << speedAndBiases[3] << ", " << speedAndBiases[4] << ", " << speedAndBiases[5] << "]";
+    cv::putText(_image, gyrobiastext.str(), cv::Point(15,75),
+                    cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
+
+    std::stringstream accbiastext;
+    accbiastext << "accbias = [" << speedAndBiases[6] << ", " << speedAndBiases[7] << ", " << speedAndBiases[8] << "]";
+    cv::putText(_image, accbiastext.str(), cv::Point(15,95),
                     cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
 
     //Also output the position, angle and velocity to result.txt
     fp << r[0] << ", " << r[1] << ", " << r[2] << ", ";
-
-    Eigen::Vector3d ea = C.eulerAngles(0, 1, 2);
     fp << ea[0] << ", " << ea[1] << ", " << ea[2] << ", ";
-    fp << speedAndBiases[0] << ", " << speedAndBiases[1] << ", " << speedAndBiases[2] << endl;
 
+    fp << speedAndBiases[0] << ", " << speedAndBiases[1] << ", " << speedAndBiases[2] << ", ";
+    fp << speedAndBiases[3] << ", " << speedAndBiases[4] << ", " << speedAndBiases[5] << ", ";
+    fp << speedAndBiases[6] << ", " << speedAndBiases[7] << ", " << speedAndBiases[8] << endl;
     //fp << extrinsic.back().T() << endl;;
 
     drawing_ = false; // notify
@@ -1328,7 +1346,7 @@ int main(int argc, char **argv)
       std::cin.get();
   }
 
-  fp << "pos_x, pos_y, pos_z, theta_x, theta_y, theta_z, vel_x, vel_y, vel_z" << endl;
+  fp << "pos_x, pos_y, pos_z, theta_x, theta_y, theta_z, vel_x, vel_y, vel_z, bias_gyro_x, bias_gyro_y, bias_gyro_z, bias_acc_x, bias_acc_y, bias_acc_z" << endl;
 
 
 

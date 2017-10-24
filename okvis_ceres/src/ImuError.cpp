@@ -291,8 +291,8 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
                           okvis::SpeedAndBias & speedAndBiases, // will be update
                           const okvis::Time & t_start, //start may not be a regular imu timestamp
                           const okvis::Time & t_end,
-                          covariance_t* covariance,
-                          jacobian_t* jacobian)
+                          covariance_t* covariance, // output, and is not used in real localization
+                          jacobian_t* jacobian) // output, and is not used in real localization
 {
 
   // now the propagation
@@ -357,7 +357,7 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
       double interval = (nexttime - it->timeStamp).toSec();
       nexttime = t_end;
       dt = (nexttime - time).toSec();
-      const double r = dt / interval;
+      const double r = dt / interval; // end is at a time r from current and next imuframe, r between 0 to 1
       omega_S_1 = ((1.0 - r) * omega_S_0 + r * omega_S_1).eval();
       acc_S_1 = ((1.0 - r) * acc_S_0 + r * acc_S_1).eval();
     }
@@ -399,22 +399,26 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
     }
 
     // actual propagation
+    // Taking the mean of the value between 2 frames is "_true" because it is already the best guess
     // orientation:
+    // Convert euler angle to quaternion representation
     Eigen::Quaterniond dq;
     const Eigen::Vector3d omega_S_true = (0.5*(omega_S_0+omega_S_1) - speedAndBiases.segment<3>(3));
-    const double theta_half = omega_S_true.norm() * 0.5 * dt;
+    const double theta_half = omega_S_true.norm() * 0.5 * dt; // half of angle actually rotate between 2 frames
     const double sinc_theta_half = ode::sinc(theta_half);
     const double cos_theta_half = cos(theta_half);
     dq.vec() = sinc_theta_half * omega_S_true * 0.5 * dt;
     dq.w() = cos_theta_half;
-    Eigen::Quaterniond Delta_q_1 = Delta_q * dq;
+    Eigen::Quaterniond Delta_q_1 = Delta_q * dq; // Delta_q = (1,0,0,0) initially;
+
     // rotation matrix integral:
-    const Eigen::Matrix3d C = Delta_q.toRotationMatrix();
-    const Eigen::Matrix3d C_1 = Delta_q_1.toRotationMatrix();
+    const Eigen::Matrix3d C = Delta_q.toRotationMatrix(); // rotation from start until this time
+    const Eigen::Matrix3d C_1 = Delta_q_1.toRotationMatrix(); // rotation from start until next time
     const Eigen::Vector3d acc_S_true = (0.5*(acc_S_0+acc_S_1) - speedAndBiases.segment<3>(6));
     const Eigen::Matrix3d C_integral_1 = C_integral + 0.5*(C + C_1)*dt;
     const Eigen::Vector3d acc_integral_1 = acc_integral + 0.5*(C + C_1)*acc_S_true*dt;
-    // rotation matrix double integral:
+
+    // rotation matrix double integral (used in jacobian)
     C_doubleintegral += C_integral*dt + 0.25*(C + C_1)*dt*dt;
     acc_doubleintegral += acc_integral*dt + 0.25*(C + C_1)*acc_S_true*dt*dt;
 
@@ -439,6 +443,8 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
       F_delta.block<3,3>(6,3) = -okvis::kinematics::crossMx(0.5*(C + C_1)*acc_S_true*dt);
       F_delta.block<3,3>(6,9) = 0.5*dt*(C*acc_S_x*cross + C_1*acc_S_x*cross_1);
       F_delta.block<3,3>(6,12) = -0.5*(C + C_1)*dt;
+
+      //P_delta is the Jacobian of the increment (w/o biases)
       P_delta = F_delta*P_delta*F_delta.transpose();
       // add noise. Note that transformations with rotation matrices can be ignored, since the noise is isotropic.
       //F_tot = F_delta*F_tot;
@@ -480,11 +486,16 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
   }
 
   // actual propagation output:
+  // 6371009 is earth's radius
   const Eigen::Vector3d g_W = imuParams.g * Eigen::Vector3d(0, 0, 6371009).normalized();
-  T_WS.set(r_0+speedAndBiases.head<3>()*Delta_t
+
+  //update pose (from original (r_0, q_WS_0) to frame it)
+  T_WS.set(r_0+speedAndBiases.head<3>()*Delta_t // original position + speed * deltaT
              + C_WS_0*(acc_doubleintegral/*-C_doubleintegral*speedAndBiases.segment<3>(6)*/)
              - 0.5*g_W*Delta_t*Delta_t,
-             q_WS_0*Delta_q);
+             q_WS_0*Delta_q); // original orientation + delta_q
+
+  //update speed only?
   speedAndBiases.head<3>() += C_WS_0*(acc_integral/*-C_integral*speedAndBiases.segment<3>(6)*/)-g_W*Delta_t;
 
   // assign Jacobian, if requested

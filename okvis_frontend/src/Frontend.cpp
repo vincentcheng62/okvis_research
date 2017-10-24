@@ -719,6 +719,56 @@ void Frontend::matchStereo(okvis::Estimator& estimator,
       }
       multiFrame->setLandmarkId(im, k, okvis::IdProvider::instance().newId());
     }
+
+
+
+
+    //Try to do online calibration of the extrinsic between camera and imu
+    if(isInitialized_)
+    {
+        std::vector<cv::Point2f> imagePoints;
+        std::vector<cv::Point3f> objectPoints;
+
+        for (size_t k = 0; k < ksize; ++k)
+        {
+            if(multiFrame->landmarkId(im, k)!=0)
+            {
+                Eigen::Vector2d keypt;
+                multiFrame->getKeypoint(im, k, keypt);
+                MapPoint landmark;
+                estimator.getLandmark(multiFrame->landmarkId(im, k), landmark);
+
+                imagePoints.emplace_back(keypt[0], keypt[1]);
+                objectPoints.emplace_back(landmark.point[0]/landmark.point[3],
+                        landmark.point[1]/landmark.point[3],landmark.point[2]/landmark.point[3]);
+            }
+
+        }
+
+        LOG(INFO) << "Start online calibration...";
+        LOG(INFO) << "There are " << imagePoints.size() << " imagePoints and " << objectPoints.size() << " objectPoints.";
+        cv::Mat cameraMatrix(3,3,cv::DataType<double>::type);
+        cv::setIdentity(cameraMatrix);
+        cameraMatrix.at<double>(0,0) = 432.13078374;
+        cameraMatrix.at<double>(1,1) = 430.14855392;
+        cameraMatrix.at<double>(0,2) = 305.71627069;
+        cameraMatrix.at<double>(1,2) = 266.44839265;
+
+        cv::Mat distCoeffs(4,1,cv::DataType<double>::type);
+        distCoeffs.at<double>(0) = -0.04955165;
+        distCoeffs.at<double>(1) = 0.02744712;
+        distCoeffs.at<double>(2) = -0.00189845;
+        distCoeffs.at<double>(3) = -0.00160872;
+
+        cv::Mat rvec(3,1,cv::DataType<double>::type);
+        cv::Mat tvec(3,1,cv::DataType<double>::type);
+
+        cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec);
+
+        LOG(INFO) << "rvec: " << rvec.t();
+        LOG(INFO) << "tvec: " << (57.29577951*tvec).t(); // in degree
+
+    }
   }
 
 
