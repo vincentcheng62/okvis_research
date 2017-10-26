@@ -118,7 +118,8 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::resetFrames(
     std::shared_ptr<okvis::MultiFrame> frameA_ptr,
     std::shared_ptr<okvis::MultiFrame> frameB_ptr, size_t camIdA, size_t camIdB,
     const okvis::kinematics::Transformation& T_AB,
-    const Eigen::Matrix<double, 6, 6>& UOplus) {
+    const Eigen::Matrix<double, 6, 6>& UOplus)
+{
   T_AB_ = T_AB;
   T_BA_ = T_AB_.inverse();
 
@@ -128,18 +129,21 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::resetFrames(
   camIdB_ = camIdB;
 
   UOplus_ = UOplus;
+
   // also do all backprojections
-//	_frameA_ptr->computeAllBackProjections(false);
-//	_frameB_ptr->computeAllBackProjections(false);
+  //	_frameA_ptr->computeAllBackProjections(false);
+  //	_frameB_ptr->computeAllBackProjections(false);
   // prepare the pose prior, since this will not change.
   ::okvis::ceres::PoseError poseError(T_AB_, UOplus_.inverse());
   Eigen::Matrix<double, 6, 6, Eigen::RowMajor> J_minimal;  // Jacobian
   Eigen::Matrix<double, 7, 7, Eigen::RowMajor> J;  // Jacobian
+
   poseA_ = ::okvis::ceres::PoseParameterBlock(
       okvis::kinematics::Transformation(), 0, okvis::Time(0));
   poseB_ = ::okvis::ceres::PoseParameterBlock(T_AB_, 0, okvis::Time(0));
   extrinsics_ = ::okvis::ceres::PoseParameterBlock(
       okvis::kinematics::Transformation(), 0, okvis::Time(0));
+
   double residuals[6];
   // evaluate to get the jacobian
   double* parameters = poseB_.parameters();
@@ -150,9 +154,9 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::resetFrames(
   // prepare lhs of Gauss-Newton:
   H_.setZero();
   H_.topLeftCorner<6, 6>() = J_minimal.transpose() * J_minimal;
+  //LOG(INFO) << "resetFrames: H(lhs of Gauss-Newton: " << H_;
 
-  sigmaRay_ = 0.5
-      / std::min(
+  sigmaRay_ = 0.5/ std::min(
           frameA_->geometryAs<CAMERA_GEOMETRY_T>(camIdA_)->focalLengthU(),
           frameB_->geometryAs<CAMERA_GEOMETRY_T>(camIdB_)->focalLengthU());
 

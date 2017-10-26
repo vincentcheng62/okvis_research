@@ -81,12 +81,13 @@ Frontend::Frontend(size_t numCameras)
       briskMatchingThreshold_(60.0), // default 60.0
       briskMatchingRatioThreshold_(3.0),
       matcher_(
-          std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(4, 4, true))), // default 4: 4 matcher threads
+          std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(1, 4, true))), // default 4: 4 matcher threads, 4 num of best, dont use distance ratio
       keyframeInsertionOverlapThreshold_(0.6), // default 0.6, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
       keyframeInsertionMatchingRatioThreshold_(0.2),//default 0.2, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
       rotation_only_ratio_(0.9), // default is 0.8, make it larger so easier to initialize
       ransacinlinersminnumber_(10), // default is 10
       ransacthreshold_(4), //default is 9, is the reprojection error in pixels?
+      ransacdebugoutputlevel_(0), //default is 0, 0: no debug info, 1: short summary, 2: output each trial
       ransac_max_iteration_(1000), //default is 50
       required3d2dmatches_(5), //default is 5
       IsOriginalFeatureDetector_(false)
@@ -153,6 +154,18 @@ bool Frontend::dataAssociationAndInitialization(
   // RANSAC (2D2D / 3D2D)
   // decide keyframe
   // left-right stereo match & init
+
+//    //Print out all keypts to debug repeatibility problem
+//    const size_t ksize = framesInOut->numKeypoints(0);
+//    std::string longstring;
+//    for (size_t k = 0; k < ksize; ++k)
+//    {
+//          Eigen::Vector2d keypt;
+//          framesInOut->getKeypoint(0, k, keypt);
+//          longstring += ("(" + std::to_string(keypt[0]) + ", " +
+//                  std::to_string(keypt[1])+ ") ");
+//    }
+//    LOG(INFO) << "All keypts: " << longstring;
 
   // find distortion type
   okvis::cameras::NCameraSystem::DistortionType distortionType = params.nCameraSystem
@@ -457,6 +470,18 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
     return 0;
   }
 
+//  //Print out all landmarks to debug repeatibility problem
+//  PointMap landmarks;
+//  std::string longstring;
+//  estimator.getLandmarks(landmarks);
+//  for (auto i: landmarks)
+//  {
+//      longstring += ("(" + std::to_string(i.second.point[0]) + ", " +
+//              std::to_string(i.second.point[1])+ ", " +
+//              std::to_string(i.second.point[2]) + ") ");
+//  }
+//  LOG(INFO) << "All landmarks: " << longstring;
+
   int retCtr = 0;
   int numUncertainMatches = 0;
 
@@ -481,6 +506,7 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
       matcher_->match<MATCHING_ALGORITHM>(matchingAlgorithm);
       retCtr += matchingAlgorithm.numMatches();
       numUncertainMatches += matchingAlgorithm.numUncertainMatches();
+      LOG(INFO) << "olderFrameId: " << olderFrameId << ", MatchToKeyFrame(Match3D2D).numMatches(): " << matchingAlgorithm.numMatches();
 
     }
 
@@ -511,6 +537,7 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
       matcher_->match<MATCHING_ALGORITHM>(matchingAlgorithm);
       retCtr += matchingAlgorithm.numMatches();
       numUncertainMatches += matchingAlgorithm.numUncertainMatches();
+      LOG(INFO) << "olderFrameId: " << olderFrameId << ", MatchToKeyFrame(Match2D2D).numMatches(): " << matchingAlgorithm.numMatches();
     }
 
     bool rotationOnly_tmp = false;
@@ -590,6 +617,7 @@ int Frontend::matchToLastFrame(okvis::Estimator& estimator,
     // match 3D-2D
     matcher_->match<MATCHING_ALGORITHM>(matchingAlgorithm);
     retCtr += matchingAlgorithm.numMatches();
+    LOG(INFO) << "MatchToLastFrame(Match3D2D).numMatches(): " << matchingAlgorithm.numMatches();
   }
 
   runRansac3d2d(estimator, params.nCameraSystem,
@@ -607,6 +635,7 @@ int Frontend::matchToLastFrame(okvis::Estimator& estimator,
     // match 2D-2D for initialization of new (mono-)correspondences
     matcher_->match<MATCHING_ALGORITHM>(matchingAlgorithm);
     retCtr += matchingAlgorithm.numMatches();
+    LOG(INFO) << "MatchToLastFrame(Match2D2D).numMatches(): " << matchingAlgorithm.numMatches();
   }
 
   // remove outliers only, not to initialize pose
@@ -724,51 +753,51 @@ void Frontend::matchStereo(okvis::Estimator& estimator,
 
 
     //Try to do online calibration of the extrinsic between camera and imu
-    if(isInitialized_)
-    {
-        std::vector<cv::Point2f> imagePoints;
-        std::vector<cv::Point3f> objectPoints;
+//    if(isInitialized_)
+//    {
+//        std::vector<cv::Point2f> imagePoints;
+//        std::vector<cv::Point3f> objectPoints;
 
-        for (size_t k = 0; k < ksize; ++k)
-        {
-            if(multiFrame->landmarkId(im, k)!=0)
-            {
-                Eigen::Vector2d keypt;
-                multiFrame->getKeypoint(im, k, keypt);
-                MapPoint landmark;
-                estimator.getLandmark(multiFrame->landmarkId(im, k), landmark);
+//        for (size_t k = 0; k < ksize; ++k)
+//        {
+//            if(multiFrame->landmarkId(im, k)!=0)
+//            {
+//                Eigen::Vector2d keypt;
+//                multiFrame->getKeypoint(im, k, keypt);
+//                MapPoint landmark;
+//                estimator.getLandmark(multiFrame->landmarkId(im, k), landmark);
 
-                imagePoints.emplace_back(keypt[0], keypt[1]);
-                objectPoints.emplace_back(landmark.point[0]/landmark.point[3],
-                        landmark.point[1]/landmark.point[3],landmark.point[2]/landmark.point[3]);
-            }
+//                imagePoints.emplace_back(keypt[0], keypt[1]);
+//                objectPoints.emplace_back(landmark.point[0]/landmark.point[3],
+//                        landmark.point[1]/landmark.point[3],landmark.point[2]/landmark.point[3]);
+//            }
 
-        }
+//        }
 
-        LOG(INFO) << "Start online calibration...";
-        LOG(INFO) << "There are " << imagePoints.size() << " imagePoints and " << objectPoints.size() << " objectPoints.";
-        cv::Mat cameraMatrix(3,3,cv::DataType<double>::type);
-        cv::setIdentity(cameraMatrix);
-        cameraMatrix.at<double>(0,0) = 432.13078374;
-        cameraMatrix.at<double>(1,1) = 430.14855392;
-        cameraMatrix.at<double>(0,2) = 305.71627069;
-        cameraMatrix.at<double>(1,2) = 266.44839265;
+//        LOG(INFO) << "Start online calibration...";
+//        LOG(INFO) << "There are " << imagePoints.size() << " imagePoints and " << objectPoints.size() << " objectPoints.";
+//        cv::Mat cameraMatrix(3,3,cv::DataType<double>::type);
+//        cv::setIdentity(cameraMatrix);
+//        cameraMatrix.at<double>(0,0) = 432.13078374;
+//        cameraMatrix.at<double>(1,1) = 430.14855392;
+//        cameraMatrix.at<double>(0,2) = 305.71627069;
+//        cameraMatrix.at<double>(1,2) = 266.44839265;
 
-        cv::Mat distCoeffs(4,1,cv::DataType<double>::type);
-        distCoeffs.at<double>(0) = -0.04955165;
-        distCoeffs.at<double>(1) = 0.02744712;
-        distCoeffs.at<double>(2) = -0.00189845;
-        distCoeffs.at<double>(3) = -0.00160872;
+//        cv::Mat distCoeffs(4,1,cv::DataType<double>::type);
+//        distCoeffs.at<double>(0) = -0.04955165;
+//        distCoeffs.at<double>(1) = 0.02744712;
+//        distCoeffs.at<double>(2) = -0.00189845;
+//        distCoeffs.at<double>(3) = -0.00160872;
 
-        cv::Mat rvec(3,1,cv::DataType<double>::type);
-        cv::Mat tvec(3,1,cv::DataType<double>::type);
+//        cv::Mat rvec(3,1,cv::DataType<double>::type);
+//        cv::Mat tvec(3,1,cv::DataType<double>::type);
 
-        cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec);
+//        cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec);
 
-        LOG(INFO) << "rvec: " << rvec.t();
-        LOG(INFO) << "tvec: " << (57.29577951*tvec).t(); // in degree
+//        LOG(INFO) << "rvec: " << rvec.t();
+//        LOG(INFO) << "tvec: " << (57.29577951*tvec).t(); // in degree
 
-    }
+//    }
   }
 
 
@@ -801,7 +830,22 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
                                                                 nCameraSystem,
                                                                 currentFrame);
 
+  //These are keypoints that have a
+  //corresponding landmark which is added to the estimator,
+  //has more than one observation and not at infinity
   size_t numCorrespondences = adapter.getNumberCorrespondences();
+  LOG(INFO) << "numCorrespondences: " << numCorrespondences;
+
+  //Print out all the keypt->3d points correspondence for debug repeatibility problem
+//  const size_t numK = currentFrame->numKeypoints(0);
+//  opengv::points_t all3dpts = adapter.getAllpoints();
+//  std::string longstring;
+//  for (auto i: all3dpts)
+//  {
+//      longstring += ("(" + std::to_string(i[0]) + ", " + std::to_string(i[1]) + ", " + std::to_string(i[2]) + ") ");
+//  }
+//  LOG(INFO) << "All 3d pts: " << longstring;
+
   if (numCorrespondences < 5)
   {
     LOG(INFO) << "numCorrespondences: " << numCorrespondences << " < 5, return from 3d2d directly";
@@ -820,7 +864,7 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
   ransac.max_iterations_ = ransac_max_iteration_; // default: 50
   // initial guess not needed...
   // run the ransac
-  ransac.computeModel(0);
+  ransac.computeModel(ransacdebugoutputlevel_);
 
   // assign transformation
   numInliers = ransac.inliers_.size();
@@ -897,6 +941,19 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
 
     size_t numCorrespondences = adapter.getNumberCorrespondences();
 
+    LOG(INFO) << "olderFrameId: " << olderFrameId << ", currentFrameId: " << currentFrameId;
+    LOG(INFO) << "numCorrespondences: " << numCorrespondences;
+    //Print out all the keypt->3d points correspondence for debug repeatibility problem
+    //const size_t numK = currentFrame->numKeypoints(0);
+//    okvis::Matches allmatches = adapter.getAllMatches();
+//    std::string longstring;
+//    for (auto i: allmatches)
+//    {
+//        longstring += ("(" + std::to_string(i.idxA) + ", " + std::to_string(i.idxB) + ") ");
+//    }
+//    LOG(INFO) << "All matches: " << longstring;
+
+
     if (numCorrespondences < 10)
     {
       LOG(INFO) << "numCorrespondences: " << numCorrespondences << " < 10, exit ransac2d2d";
@@ -914,7 +971,7 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
     rotation_only_ransac.max_iterations_ = ransac_max_iteration_; // default: 50
 
     // run the ransac
-    rotation_only_ransac.computeModel(0);
+    rotation_only_ransac.computeModel(ransacdebugoutputlevel_);
 
     // get quality
     int rotation_only_inliers = rotation_only_ransac.inliers_.size();
@@ -935,7 +992,7 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
     rel_pose_ransac.max_iterations_ = ransac_max_iteration_; // default: 50
 
     // run the ransac
-    rel_pose_ransac.computeModel(0);
+    rel_pose_ransac.computeModel(ransacdebugoutputlevel_);
 
     // assess success
     int rel_pose_inliers = rel_pose_ransac.inliers_.size();
@@ -1019,33 +1076,41 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
       okvis::kinematics::Transformation T_SCA, T_WSA, T_SC0, T_WS0;
       uint64_t idA = olderFrameId;
       uint64_t id0 = currentFrameId;
+      // im is camera id
       estimator.getCameraSensorStates(idA, im, T_SCA); // Get camera states for a given pose ID
       estimator.get_T_WS(idA, T_WSA);
       estimator.getCameraSensorStates(id0, im, T_SC0);
       estimator.get_T_WS(id0, T_WS0);
+
+      //T_WSA and T_WS0 are only from imu propagation
 
       if (rel_pose_success)
       {
         // update pose
         // if the IMU is used, this will be quickly optimized to the correct scale. Hopefully.
         T_C1C2_mat.topLeftCorner<3, 4>() = rel_pose_ransac.model_coefficients_;
+        LOG(INFO) << "T_C1C2 by ransac: " << rel_pose_ransac.model_coefficients_;
 
         //initialize with projected length according to motion prior.
+        //T_C1C2 is the transformation from oldframe to currentframe
+        okvis::kinematics::Transformation T_C1C2 = (T_WSA*T_SCA).inverse() * (T_WS0 * T_SC0);
+        LOG(INFO) << "T_C1C2 by imu propagation: " << T_C1C2.T();
 
-        okvis::kinematics::Transformation T_C1C2 = T_SCA.inverse()
-            * T_WSA.inverse() * T_WS0 * T_SC0;
+        //Use the translation of the imu guess to scale the ransac result
+        //Project T_C1C2.r() onto T_C1C2_mat.topRightCorner<3, 1>() and get the vector projection
         T_C1C2_mat.topRightCorner<3, 1>() = T_C1C2_mat.topRightCorner<3, 1>()
-            * std::max( 0.0, double(
-                    T_C1C2_mat.topRightCorner<3, 1>().transpose() * T_C1C2.r())); // r(): translation vector
+            * std::max( 0.0, double(T_C1C2_mat.topRightCorner<3, 1>().transpose() * T_C1C2.r())  // r(): translation vector
+                        /*double(T_C1C2_mat.topRightCorner<3, 1>().transpose()*T_C1C2_mat.topRightCorner<3, 1>())*/);
       }
       else
       {
         // rotation only assigned...
-        T_C1C2_mat.topLeftCorner<3, 3>() = rotation_only_ransac
-            .model_coefficients_;
+        T_C1C2_mat.topLeftCorner<3, 3>() = rotation_only_ransac.model_coefficients_;
       }
 
-      // set.
+      // set., id0 is currentframeID
+      // So it goes from (1) world to sensor of lastframe (2) sensor to camera of lastframe
+      // (3) camera of lastframe to camera of current frame (4) camera to sensor of currentframe
       estimator.set_T_WS(id0, T_WSA * T_SCA * okvis::kinematics::Transformation(T_C1C2_mat)
               * T_SC0.inverse());
     }

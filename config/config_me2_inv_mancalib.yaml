@@ -25,14 +25,14 @@ imu_params:
     a_max: 176.0 # acceleration saturation [m/s^2]
     g_max: 7.8 # gyro saturation [rad/s]
 
-    sigma_g_c: 12.0e-4 # gyro noise density [rad/s/sqrt(Hz)]
-    sigma_a_c: 8.0e-3 # accelerometer noise density [m/s^2/sqrt(Hz)]
+    sigma_g_c: 12.0e-4 # gyro noise density [rad/s/sqrt(Hz)], used in covariance propagation
+    sigma_a_c: 8.0e-3 # accelerometer noise density [m/s^2/sqrt(Hz)], used in covariance propagation
 
-    sigma_bg: 0.03 # gyro bias prior [rad/s]
-    sigma_ba: 0.1 # accelerometer bias prior [m/s^2]
+    sigma_bg: 0.03 # gyro bias prior [rad/s], used in addStates() when statesMap_.size() == 1 as prior
+    sigma_ba: 0.1 # accelerometer bias prior [m/s^2], used in addStates() when statesMap_.size() == 1 as prior
 
-    sigma_gw_c: 4.0e-6 # gyro drift noise density [rad/s^s/sqrt(Hz)]
-    sigma_aw_c: 4.0e-5 # accelerometer drift noise density [m/s^2/sqrt(Hz)]
+    sigma_gw_c: 4.0e-6 # gyro drift noise density [rad/s^s/sqrt(Hz)], used in covariance propagation
+    sigma_aw_c: 4.0e-5 # accelerometer drift noise density [m/s^2/sqrt(Hz)], used in covariance propagation
 
     tau: 3600.0 # reversion time constant, currently not in use [s]
     g: 9.81007 # Earth's acceleration due to gravity [m/s^2]
@@ -59,12 +59,12 @@ ceres_options:
 
 # detection
 detection_options:
-    threshold: 15.0      # detection threshold. By default the uniformity radius in pixels
+    threshold: 10.0      # detection threshold. By default the uniformity radius in pixels
     matching_threshold: 45.0    # the threshold for the hamming distance between 2 descriptors, more strict for lower value, cannot set too low, since there are noise in images, even same physical pt descriptor will not be exactly the same
     matching_ratio_threshold: 1.5 # the ratio threshold s.t. second/best>threshold will be matched
     octaves: 3           # number of octaves for detection. 0 means single-scale at highest resolution
     maxNoKeypoints: 400  # restrict to a maximum of this many keypoints per image (strongest ones)
-    IsHarris: false        # is using Fast or sse Harris corner detector (the original)
+    IsHarris: true        # is using Fast or sse Harris corner detector (the original)
     rotation_only_threshold: 0.92   # default is 0.8, higher will make initialization easier but have a higher chance of orientation initialization only
 
 # delay of images [s]:

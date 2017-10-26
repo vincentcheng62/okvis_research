@@ -132,6 +132,8 @@ class FrameNoncentralAbsoluteAdapter : public AbsoluteAdapterBase {
   /// @}
 
   // lestefan: some additional accessors
+
+  opengv::points_t getAllpoints() {return points_;}
   /**
    * @brief Get the camera index for a specific correspondence.
    * @param index The serialized index of the correspondence.

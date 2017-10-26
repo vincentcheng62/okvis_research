@@ -45,7 +45,7 @@
     #define USBPORTNAME QString("ttyUSB")
 #endif
 
-#define PLAY_DELAY_IN_MS (100) // 0 is stop
+#define PLAY_DELAY_IN_MS (5000) // 0 is stop
 #define DEFAULT_CONFIG_FILE ("../config/config_me2_inv_mancalib.yaml")
 
 namespace fs = std::experimental::filesystem;
@@ -762,8 +762,9 @@ class PoseViewer
           for (auto lm : landmark_vector)
           {
               fp2 << lm.id << ", " << lm.point[0]/lm.point[3] << ", " << lm.point[1]/lm.point[3] << ", " <<
-                     lm.point[2]/lm.point[3] << ", "  << lm.quality << ", " << lm.distance << endl;
+                     lm.point[2]/lm.point[3] << ", " << lm.point[3] << ", "  << lm.quality << ", " << lm.distance << endl;
           }
+          fp2 << endl;
       }
       publishlmcounter++;
   }
@@ -1364,7 +1365,7 @@ int main(int argc, char **argv)
       std::cin.get();
   }
 
-  fp2 << "id, v[0], v[1], v[2], quality, distance" << endl;
+  fp2 << "id, x, y, z, w, quality(0-1), distance from world center" << endl;
   okvis_estimator.setLandmarksCallback(
       std::bind(&PoseViewer::publishLandmarksAsCallback, &poseViewer,
                 std::placeholders::_1, std::placeholders::_2,

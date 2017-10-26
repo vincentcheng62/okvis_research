@@ -71,8 +71,10 @@ void VioVisualizer::init(okvis::VioParameters& parameters) {
   parameters_ = parameters;
 }
 
+//drawingmode 0: all types, 1: only green and yellow, 2: only green
 cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
-                                   size_t image_number)
+                                   size_t image_number,
+                                   int drawingmode)
 {
 
   std::shared_ptr<okvis::MultiFrame> keyframe = data->keyFrames;
@@ -135,9 +137,9 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
         color = cv::Scalar(0, 255, 255);  // yellow: 2D-2D match
       }
 
-      Eigen::Vector2d keyframePt;
+      Eigen::Vector2d keyframePt; // when projecting the landmark into keyframe camera coord
       bool isVisibleInKeyframe = false;
-      Eigen::Vector4d hP_C = lastKeyframeT_CW * hPoint;
+      Eigen::Vector4d hP_C = lastKeyframeT_CW * hPoint; // the landmark in lastkeyframe coordinate
       switch (distortionType)
       {
         case okvis::cameras::NCameraSystem::RadialTangential: {
@@ -175,14 +177,16 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
           break;
       }
 
-      if (fabs(hP_C[3]) > 1.0e-8) {
-        if (hP_C[2] / hP_C[3] < 0.4) {
+      if (fabs(hP_C[3]) > 1.0e-8)
+      {
+        if (hP_C[2] / hP_C[3] < 0.2) // if the landmark is closer than 40cm in the keyframe camera coord
+        {
           isVisibleInKeyframe = false;
         }
       }
 
       //Only when the keypoint is both visible in keyframe and current frame will draw a matching line
-      if (isVisibleInKeyframe)
+      if (isVisibleInKeyframe && (drawingmode ==1 || drawingmode == 2 && it->isInitialized))
       {
         // found in the keyframe. draw line
         cv::line(outimg, cv::Point2f(keyframePt[0], keyframePt[1]),
@@ -194,26 +198,32 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
       }
     }
 
-    // draw keypoint on the bottom image, put it here, since no left-right stereo match at all
-    const double r = 0.5 * it->keypointSize;
-    cv::circle(current, cv::Point2f(keypoint[0], keypoint[1]), r, color, 1, CV_AA);
+    if (drawingmode ==0 || drawingmode ==1 && fabs(it->landmark_W[3]) > 1.0e-8 ||
+            drawingmode == 2 && it->isInitialized)
+    {
+        // draw keypoint on the bottom image, put it here, since no left-right stereo match at all
+        const double r = 0.5 * it->keypointSize;
+        cv::circle(current, cv::Point2f(keypoint[0], keypoint[1]), r, color, 1, CV_AA);
 
-    //Also draw the keypoint direction
-    cv::KeyPoint cvKeypoint;
-    frame->getCvKeypoint(image_number, it->keypointIdx, cvKeypoint);
-    const double angle = cvKeypoint.angle / 180.0 * M_PI;
-    cv::line( outimg,
-        cv::Point2f(keypoint[0], keypoint[1] + rowJump),
-        cv::Point2f(keypoint[0], keypoint[1] + rowJump)
-            + cv::Point2f(cos(angle), sin(angle)) * r,
-        color, 1, CV_AA);
+        //Also draw the keypoint direction
+        cv::KeyPoint cvKeypoint;
+        frame->getCvKeypoint(image_number, it->keypointIdx, cvKeypoint);
+        const double angle = cvKeypoint.angle / 180.0 * M_PI;
+        cv::line( outimg,
+            cv::Point2f(keypoint[0], keypoint[1] + rowJump),
+            cv::Point2f(keypoint[0], keypoint[1] + rowJump)
+                + cv::Point2f(cos(angle), sin(angle)) * r,
+            color, 1, CV_AA);
+    }
+
 
   }
   return outimg;
 }
 
 cv::Mat VioVisualizer::drawKeypoints(VisualizationData::Ptr& data,
-                                     size_t cameraIndex) {
+                                     size_t cameraIndex)
+{
 
   std::shared_ptr<okvis::MultiFrame> currentFrames = data->currentFrames;
   const cv::Mat currentImage = currentFrames->image(cameraIndex);
@@ -223,7 +233,8 @@ cv::Mat VioVisualizer::drawKeypoints(VisualizationData::Ptr& data,
   cv::Scalar greenColor(0, 255, 0);  // green
 
   cv::KeyPoint keypoint;
-  for (size_t k = 0; k < currentFrames->numKeypoints(cameraIndex); ++k) {
+  for (size_t k = 0; k < currentFrames->numKeypoints(cameraIndex); ++k)
+  {
     currentFrames->getCvKeypoint(cameraIndex, k, keypoint);
 
     double radius = keypoint.size;
@@ -241,14 +252,17 @@ cv::Mat VioVisualizer::drawKeypoints(VisualizationData::Ptr& data,
   return outimg;
 }
 
-void VioVisualizer::showDebugImages(VisualizationData::Ptr& data) {
+void VioVisualizer::showDebugImages(VisualizationData::Ptr& data)
+{
   std::vector<cv::Mat> out_images(parameters_.nCameraSystem.numCameras());
-  for (size_t i = 0; i < parameters_.nCameraSystem.numCameras(); ++i) {
+  for (size_t i = 0; i < parameters_.nCameraSystem.numCameras(); ++i)
+  {
     out_images[i] = drawMatches(data, i);
   }
 
   // draw
-  for (size_t im = 0; im < parameters_.nCameraSystem.numCameras(); im++) {
+  for (size_t im = 0; im < parameters_.nCameraSystem.numCameras(); im++)
+  {
     std::stringstream windowname;
     windowname << "camera " << im;
     cv::imshow(windowname.str(), out_images[im]);

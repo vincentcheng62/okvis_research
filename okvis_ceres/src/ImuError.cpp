@@ -411,15 +411,15 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
     dq.w() = cos_theta_half;
     Eigen::Quaterniond Delta_q_1 = Delta_q * dq; // Delta_q = (1,0,0,0) initially;
 
-    // rotation matrix integral:
+    // integral:
     const Eigen::Matrix3d C = Delta_q.toRotationMatrix(); // rotation from start until this time
     const Eigen::Matrix3d C_1 = Delta_q_1.toRotationMatrix(); // rotation from start until next time
-    const Eigen::Vector3d acc_S_true = (0.5*(acc_S_0+acc_S_1) - speedAndBiases.segment<3>(6));
+    const Eigen::Vector3d acc_S_true = (0.5*(acc_S_0+acc_S_1) - speedAndBiases.segment<3>(6)); // mean-accelerometer bias
     const Eigen::Matrix3d C_integral_1 = C_integral + 0.5*(C + C_1)*dt;
-    const Eigen::Vector3d acc_integral_1 = acc_integral + 0.5*(C + C_1)*acc_S_true*dt;
+    const Eigen::Vector3d acc_integral_1 = acc_integral + 0.5*(C + C_1)*acc_S_true*dt; // velocity in world frame
 
-    // rotation matrix double integral (used in jacobian)
-    C_doubleintegral += C_integral*dt + 0.25*(C + C_1)*dt*dt;
+    // double integral
+    C_doubleintegral += C_integral*dt + 0.25*(C + C_1)*dt*dt; // (used in jacobian)
     acc_doubleintegral += acc_integral*dt + 0.25*(C + C_1)*acc_S_true*dt*dt;
 
     // Jacobian parts
@@ -488,15 +488,18 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
   // actual propagation output:
   // 6371009 is earth's radius
   const Eigen::Vector3d g_W = imuParams.g * Eigen::Vector3d(0, 0, 6371009).normalized();
+  //g_w = (0,0,9.81007)
 
   //update pose (from original (r_0, q_WS_0) to frame it)
   T_WS.set(r_0+speedAndBiases.head<3>()*Delta_t // original position + speed * deltaT
              + C_WS_0*(acc_doubleintegral/*-C_doubleintegral*speedAndBiases.segment<3>(6)*/)
              - 0.5*g_W*Delta_t*Delta_t,
+
              q_WS_0*Delta_q); // original orientation + delta_q
 
   //update speed only?
-  speedAndBiases.head<3>() += C_WS_0*(acc_integral/*-C_integral*speedAndBiases.segment<3>(6)*/)-g_W*Delta_t;
+  speedAndBiases.head<3>() += C_WS_0*(acc_integral/*-C_integral*speedAndBiases.segment<3>(6)*/)
+                                -g_W*Delta_t;
 
   // assign Jacobian, if requested
   if (jacobian)

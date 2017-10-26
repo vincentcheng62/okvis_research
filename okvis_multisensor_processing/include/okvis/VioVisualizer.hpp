@@ -93,9 +93,10 @@ class VioVisualizer {
    *        the current keyframe and returns the result.
    * @param data Visualization data.
    * @param image_number Index of the frame to display.
+   * @param drawingmode 0: all types, 1: only green and yellow, 2: only green
    * @return OpenCV matrix with the resulting image.
    */
-  cv::Mat drawMatches(VisualizationData::Ptr& data, size_t image_number);
+  cv::Mat drawMatches(VisualizationData::Ptr& data, size_t image_number, int drawingmode=0);
   
  private:
   /**

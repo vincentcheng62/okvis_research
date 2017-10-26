@@ -153,6 +153,8 @@ class FrameRelativeAdapter : public RelativeAdapterBase {
    * @return The standard deviation in [rad].
    */
   double getSigmaAngle2(size_t index);
+
+  okvis::Matches getAllMatches() { return matches_;}
   /**
    * @brief Get the keypoint index in frame 1 of a correspondence.
    * @param index The serialized index of the correspondence.

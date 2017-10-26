@@ -48,6 +48,7 @@
 #include <okvis/IdProvider.hpp>
 #include <okvis/MultiFrame.hpp>
 #include <okvis/assert_macros.hpp>
+#include <iomanip>
 
 /// \brief okvis Main namespace of this package.
 namespace okvis {
@@ -129,7 +130,7 @@ bool Estimator::addStates(
       return false;
     }
     speedAndBias.setZero();
-    speedAndBias.segment<3>(6) = imuParametersVec_.at(0).a0;
+    speedAndBias.segment<3>(6) = imuParametersVec_.at(0).a0; // the initial value given in the config file
   }
   else
   {
@@ -152,6 +153,14 @@ bool Estimator::addStates(
     int numUsedImuMeasurements = ceres::ImuError::propagation(
         imuMeasurements, imuParametersVec_.at(0), T_WS, speedAndBias,
         statesMap_.rbegin()->second.timestamp, multiFrame->timestamp());
+
+    LOG(INFO) << numUsedImuMeasurements << " imu measurements are propagated in addStates()";
+    LOG(INFO) << "Start: " << statesMap_.rbegin()->second.timestamp << ", end: " << multiFrame->timestamp();
+    LOG(INFO) << "T_WS.r() is: "  << std::fixed << std::setprecision(16) << T_WS.r()[0] << ", " << T_WS.r()[1] << ", " << T_WS.r()[2] ;
+
+    Eigen::Vector3d eaf = T_WS.C().eulerAngles(0, 1, 2);
+    LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << std::fixed << std::setprecision(16) << eaf[0] << ", " << eaf[1] << ", " << eaf[2] ;
+    LOG(INFO) << "SpeedAndBias is: " << speedAndBias.transpose();
 
     OKVIS_ASSERT_TRUE_DBG(Exception, numUsedImuMeasurements > 1,
                        "propagation failed");
@@ -686,8 +695,7 @@ bool Estimator::applyMarginalizationStrategy(
     uint64_t currentKfId = allLinearizedFrames.at(0);
 
     {
-      for(PointMap::iterator pit = landmarksMap_.begin();
-          pit != landmarksMap_.end(); )
+      for(PointMap::iterator pit = landmarksMap_.begin(); pit != landmarksMap_.end(); )
       {
 
         ceres::Map::ResidualBlockCollection residuals = mapPtr_->residuals(pit->first);
@@ -1094,7 +1102,7 @@ size_t Estimator::getLandmarks(MapPointVector & landmarks) const
 
   for(PointMap::const_iterator it=landmarksMap_.begin(); it!=landmarksMap_.end(); ++it)
   {
-    if(isLandmarkInitialized(it->first))
+    if(isLandmarkInitialized(it->first)) // only publish initialized (i.e. green) landmark
     {
         landmarks.push_back(it->second);
     }
@@ -1167,7 +1175,8 @@ uint64_t Estimator::currentFrameId() const {
 }
 
 // Checks if a particular frame is still in the IMU window
-bool Estimator::isInImuWindow(uint64_t frameId) const {
+bool Estimator::isInImuWindow(uint64_t frameId) const
+{
   if(statesMap_.at(frameId).sensors.at(SensorStates::Imu).size()==0){
     return false; // no IMU added
   }
@@ -1224,6 +1233,14 @@ bool Estimator::setLandmark(
 
   // also update in map
   landmarksMap_.at(landmarkId).point = landmark;
+
+  // also update the distance (bug fix by vincent 20171025)
+  double dist = std::numeric_limits<double>::max();
+  if(fabs(landmark[3])>1.0e-8)
+  {
+    dist = (landmark/landmark[3]).head<3>().norm(); // euclidean distance
+  }
+  landmarksMap_.at(landmarkId).distance = dist;
   return true;
 }
 

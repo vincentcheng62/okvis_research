@@ -129,6 +129,7 @@ template<class CAMERA_GEOMETRY_T>
 void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
 {
 
+  std::string debugstring;
   // setup stereo triangulator
   // first, let's get the relative uncertainty.
   okvis::kinematics::Transformation T_CaCb;
@@ -155,6 +156,8 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
       UOplus.topLeftCorner<3, 3>() *= 4e-8;
     }
   }
+
+  //LOG(INFO) << "DoSetup: UOplus:" << UOplus;
 
   // now set the frames and uncertainty
   probabilisticStereoTriangulator_.resetFrames(frameA_, frameB_, camIdA_,
@@ -197,6 +200,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
       estimator_->getLandmark(lm_id, landmark);
       Eigen::Vector4d hp_W = landmark.point;
 
+      //Only use initialized landmark when projecting 3D-2D
       if (!estimator_->isLandmarkInitialized(lm_id)) {
         skipA_[k] = true;
         continue;
@@ -207,12 +211,14 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
       const Eigen::Vector4d hp_Cb = T_CbW_ * hp_W;
       if (frameB_->geometryAs<CAMERA_GEOMETRY_T>(camIdB_)->projectHomogeneous(
           hp_Cb, &kptB)
-          != okvis::cameras::CameraBase::ProjectionStatus::Successful) {
+          != okvis::cameras::CameraBase::ProjectionStatus::Successful)
+      {
         skipA_[k] = true;
         continue;
       }
 
-      if (landmark.observations.size() < 2) {
+      if (landmark.observations.size() < 2)
+      {
         estimator_->setLandmarkInitialized(lm_id, false);
         skipA_[k] = true;
         continue;
@@ -234,6 +240,19 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
       keypointAStdDev = 0.8 * keypointAStdDev / 12.0;
       raySigmasA_[k] = sqrt(sqrt(2)) * keypointAStdDev / fA_;  // (sqrt(MeasurementCovariance.norm()) / _fA)
     }
+
+//    LOG(INFO) << "dosetup (3D2D) projectionsIntoBUncertainties_: " << projectionsIntoBUncertainties_.transpose();
+//    LOG(INFO) << "dosetup (3D2D) projectionsIntoB_: " << projectionsIntoB_.transpose();
+
+//    debugstring="";
+//    for(auto i: raySigmasA_)
+//        debugstring += (std::to_string(i) + ", ");
+//    LOG(INFO) << "dosetup (3D2D) raySigmasA_: " << debugstring;
+
+//    debugstring="";
+//    for(auto i: skipA_)
+//        debugstring += (std::to_string(i) + ", ");
+//    LOG(INFO) << "dosetup (3D2D) skipA_: " << debugstring;
   }
 
   //matchingType_ == Match2D2D
@@ -259,6 +278,16 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
       }
 
     }
+
+//    debugstring="";
+//    for(auto i: raySigmasA_)
+//        debugstring += (std::to_string(i) + ", ");
+//    LOG(INFO) << "dosetup (2D2D) raySigmasA_: " << debugstring;
+
+//    debugstring="";
+//    for(auto i: skipA_)
+//        debugstring += (std::to_string(i) + ", ");
+//    LOG(INFO) << "dosetup (2D2D) skipA_: " << debugstring;
   }
   const size_t numB = frameB_->numKeypoints(camIdB_);
 
@@ -292,6 +321,16 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
       keypointBStdDev = 0.8 * keypointBStdDev / 12.0;
       raySigmasB_[k] = sqrt(sqrt(2)) * keypointBStdDev / fB_;
     }
+
+//    debugstring="";
+//    for(auto i: raySigmasB_)
+//        debugstring += (std::to_string(i) + ", ");
+//    LOG(INFO) << "dosetup (3D2D) raySigmasB_: " << debugstring;
+
+//    debugstring="";
+//    for(auto i: skipB_)
+//        debugstring += (std::to_string(i) + ", ");
+//    LOG(INFO) << "dosetup (3D2D) skipB_: " << debugstring;
   }
 
   //matchingType_ == Match2D2D
@@ -318,6 +357,16 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
         skipB_.push_back(false);
       }
     }
+
+//    debugstring="";
+//    for(auto i: raySigmasB_)
+//        debugstring += (std::to_string(i) + ", ");
+//    LOG(INFO) << "dosetup (2D2D) raySigmasB_: " << debugstring;
+
+//    debugstring="";
+//    for(auto i: skipB_)
+//        debugstring += (std::to_string(i) + ", ");
+//    LOG(INFO) << "dosetup (2D2D) skipB_: " << debugstring;
   }
 
 }
@@ -437,8 +486,16 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
 
     // re-triangulate...
     // potential 2d2d match - verify by triangulation
-    Eigen::Vector4d hP_Ca;
+    Eigen::Vector4d hP_Ca; // homogenous point coord of the match in camera frameA, triangulate in triangulateFast()
     bool canBeInitialized;
+
+    //Being "valid" is a minimum requirement
+    //2 rays very parallel can still be valid if (e1.cross(e2)).norm() < 6 * sigma
+    //Valid if the reprojectio error to both frameA and frameB < 4px
+    //If it is valid, it will be added to landmark already
+    //After being "valid", the next level is being "canBeInitialized"
+    //"canBeInitialized" need the 2 rays not being parallel and
+    //the reprojection error of a "out-epipolar" pt must be large enough
     bool valid = probabilisticStereoTriangulator_.stereoTriangulate(
         indexA, indexB, hP_Ca, canBeInitialized,
         std::max(raySigmasA_[indexA], raySigmasB_[indexB]));
@@ -495,6 +552,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
     }
 
     // add landmark to graph if necessary
+    // T_WCa_ = T_WSa_ * T_SaCa_;
     if (insertHomogeneousPointParameterBlock)
     {
       estimator_->addLandmark(lmId, T_WCa_ * hP_Ca); // mapPtr_->addParameterBlock() which will be used in ceres
@@ -554,6 +612,9 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
       estimator_->setLandmark(lmId, point.estimate());
 
   }
+
+  //matchingType_ == Match3D2D
+  //Only add observation for frameB only, not setLandMark
   else
   {
     OKVIS_ASSERT_TRUE_DBG(Exception,lmIdB==0,"bug. Id in frame B already set.");

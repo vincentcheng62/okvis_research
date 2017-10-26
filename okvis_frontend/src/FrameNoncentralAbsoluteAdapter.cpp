@@ -51,7 +51,8 @@
 opengv::absolute_pose::FrameNoncentralAbsoluteAdapter::FrameNoncentralAbsoluteAdapter(
     const okvis::Estimator & estimator,
     const okvis::cameras::NCameraSystem & nCameraSystem,
-    std::shared_ptr<okvis::MultiFrame> frame) {
+    std::shared_ptr<okvis::MultiFrame> frame)
+{
 
   size_t numCameras = nCameraSystem.numCameras();
 
@@ -62,7 +63,8 @@ opengv::absolute_pose::FrameNoncentralAbsoluteAdapter::FrameNoncentralAbsoluteAd
                             "mixed frame types are not supported yet");
   }
 
-  for (size_t im = 0; im < numCameras; ++im) {
+  for (size_t im = 0; im < numCameras; ++im)
+  {
 
     // store transformation. note: the T_SC estimates might actually slightly differ,
     // but we ignore this here.
@@ -72,12 +74,19 @@ opengv::absolute_pose::FrameNoncentralAbsoluteAdapter::FrameNoncentralAbsoluteAd
     // iterate through all the keypoints
     const size_t numK = frame->numKeypoints(im);
     int noCorrespondences = 0;
-    for (size_t k = 0; k < numK; ++k) {
+    for (size_t k = 0; k < numK; ++k)
+    {
       uint64_t lmId = frame->landmarkId(im, k);
 
       // check if in the map and good enough
       if (lmId == 0 || !estimator.isLandmarkAdded(lmId))
         continue;
+
+      //Only use initialized landmark when doing ransac 3D-2D, add by vincent 20171025
+//      if (!estimator.isLandmarkInitialized(lmId)) {
+//        continue;
+//      }
+
       okvis::MapPoint landmark;
       estimator.getLandmark(lmId, landmark);
       if (landmark.observations.size() < 2)
@@ -101,7 +110,9 @@ opengv::absolute_pose::FrameNoncentralAbsoluteAdapter::FrameNoncentralAbsoluteAd
       frame->getKeypointSize(im, k, keypointStdDev);
       keypointStdDev = 0.8 * keypointStdDev / 12.0;
       double fu = 1.0;
-      switch (distortionType) {
+
+      switch (distortionType)
+      {
         case okvis::cameras::NCameraSystem::RadialTangential: {
           frame
               ->geometryAs<

@@ -81,7 +81,7 @@ ThreadedKFVio::ThreadedKFVio(okvis::VioParameters& parameters)
       frontend_(parameters.nCameraSystem.numCameras()),
       parameters_(parameters),
       IsImageNormalized_(true),
-      GammaCorrectionFactor_(3.0f),
+      GammaCorrectionFactor_(3.5f),
       maxImuInputQueueSize_(2 * max_camera_input_queue_size * parameters.imu.rate
               / parameters.sensors_information.cameraRate)
 {
@@ -567,11 +567,13 @@ void ThreadedKFVio::matchingLoop()
   okvis::ImuMeasurement data;
   TimerSwitchable processImuTimer("0 processImuMeasurements",true);
 
+  srand(1); // srand() applies globally, so fix rand() seed of all ransac functions in opengv
   clock_t end, begin;
   bool isInit=false;
   //long long counter=0;
   for (;;)
   {
+      LOG(INFO) << "~~new iteration~~";
     //Frame consumer loop content
     //(1) propagate imu measurement (2) Do detectAndDescribe() (3) Push keypt measurements
       //LOG(INFO) << "frameConsumerLoop: " << counter;
@@ -907,7 +909,7 @@ void ThreadedKFVio::matchingLoop()
     okvis::SpeedAndBias SAB;
     estimator_.get_T_WS(frame_pairs->id(), T_WSt);
     estimator_.getSpeedAndBias(frame_pairs->id(), 0, SAB);
-    LOG(INFO) << "Before Optimization (Just imu integration as initial guess)...";
+    LOG(INFO) << "Just before Optimization (Just imu integration as initial guess)...";
     LOG(INFO) << "T_WS.r() is: " << std::fixed << std::setprecision(16) << T_WSt.r()[0] << ", " << T_WSt.r()[1] << ", " <<T_WSt.r()[2] ;
 
     Eigen::Vector3d eaf, ea = T_WSt.C().eulerAngles(0, 1, 2);
@@ -965,9 +967,9 @@ void ThreadedKFVio::matchingLoop()
         estimator_.getSpeedAndBias(frame_pairs->id(), 0,
                                    lastOptimizedSpeedAndBiases_);
 
-        if(isInit)
+        if(true /*isInit*/)
         {
-            LOG(INFO) << "After Optimization (after reprojection error is involved)...";
+            LOG(INFO) << "Just after Optimization (after reprojection error is involved)...";
             LOG(INFO) << "T_WS.r() is: " << std::fixed << std::setprecision(16) << lastOptimized_T_WS_.r()[0] << ", " << lastOptimized_T_WS_.r()[1] << ", " <<lastOptimized_T_WS_.r()[2] ;
 
             eaf = lastOptimized_T_WS_.C().eulerAngles(0, 1, 2);
@@ -1009,7 +1011,9 @@ void ThreadedKFVio::matchingLoop()
           result.onlyPublishLandmarks = false;
         }
         else
+        {
           result.onlyPublishLandmarks = true;
+        }
         estimator_.getLandmarks(result.landmarksVector);
 
         repropagationNeeded_ = true;
@@ -1245,7 +1249,7 @@ void ThreadedKFVio::visualizationLoop()
     std::vector<cv::Mat> out_images(parameters_.nCameraSystem.numCameras());
     for (size_t i = 0; i < parameters_.nCameraSystem.numCameras(); ++i)
     {
-      out_images[i] = visualizer_.drawMatches(new_data, i);
+      out_images[i] = visualizer_.drawMatches(new_data, i, 1);
     }
 	displayImages_.PushNonBlockingDroppingIfFull(out_images,1);
   }
