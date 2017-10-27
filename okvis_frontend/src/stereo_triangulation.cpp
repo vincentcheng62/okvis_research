@@ -50,12 +50,15 @@ namespace triangulation {
 
 // Triangulate the intersection of two rays.
 Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1, // center of A in A coordinate
-                                const Eigen::Vector3d& e1, // back project direction for keypt A in A coordinate
+                                const Eigen::Vector3d& e1, // back project direction for keypt A in A coordinate, a unit vector
                                 const Eigen::Vector3d& p2, // center of B in A coordinate
-                                const Eigen::Vector3d& e2, // back project direction for keypt B in A coordinate
+                                const Eigen::Vector3d& e2, // back project direction for keypt B in A coordinate, a unit vector
                                 double sigma,
                                 bool& isValid, bool& isParallel)
 {
+  const double initialdepthguess = 1000.0;
+  const double inversecheckthreshold = 3.0458*1e-4; //  default is 1.0e-6
+
   isParallel = false; // This should be the default, whether e1 and e2 are parallel
   // But parallel and invalid is not the same. Points at infinity are valid and parallel.
   isValid = false; // hopefully this will be reset to true.
@@ -76,6 +79,13 @@ Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1, // center of A in A c
   Eigen::Vector2d b;
   b[0] = t12.dot(e1);
   b[1] = t12.dot(e2);
+
+  // A = [ |e1|^2         -|e1||e2|cosr ]
+  //     [ |e1||e2|cosr   -|e2|^2       ]
+  // det(A) = -(|e1||e2|)^2 + (|e1||e2|)^2 * (cosr)^2 = (|e1||e2|)^2 ((cosr)^2-1)
+  // since e1 and e2 are unit vector, det(A) = ((cosr)^2-1) = -(sinr)^2
+  // If >=1 degree is allowed, then det(A) = 3.0458*1e-4
+  // If >=3 degree is allowed, then det(A) = 2.739*1e-3
   Eigen::Matrix2d A;
   A(0, 0) = e1.dot(e1);
   A(1, 0) = e1.dot(e2);
@@ -91,7 +101,8 @@ Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1, // center of A in A c
 
   bool invertible;
   Eigen::Matrix2d A_inverse;
-  A.computeInverseWithCheck(A_inverse, invertible, 1.0e-6);
+  //The matrix will be declared invertible if the absolute value of its determinant is greater than this threshold.
+  A.computeInverseWithCheck(A_inverse, invertible, inversecheckthreshold);
   Eigen::Vector2d lambda = A_inverse * b;
 
   if (!invertible)
@@ -103,9 +114,11 @@ Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1, // center of A in A c
     {
        isValid = true;  // check parallel
     }
-    //Just set the depth to 1000m, since no better guess can be done
+
+    //LOG(INFO) << "midpoint(guess): " << ((e1+e2)/2.0).transpose();
+    //Just set the depth to 10m, since no better guess can be done
     return (Eigen::Vector4d((e1[0] + e2[0]) / 2.0, (e1[1] + e2[1]) / 2.0,
-                            (e1[2] + e2[2]) / 2.0, 1e-3).normalized());
+                            (e1[2] + e2[2]) / 2.0, (1/initialdepthguess)).normalized());
   }
 
   //Try to find the intersection pt of 2 rays (i.e. e1 and e2)
@@ -128,11 +141,13 @@ Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1, // center of A in A c
     isValid = false;  // reject large chi2-errors
   }
 
-  // flip if necessary
+  // flip if necessary (flip means z-depth calculated < 0)
   if (diff.dot(e1) < 0) {
     midpoint = (p1 + 0.5 * t12) - diff;
   }
 
+  //LOG(INFO) << "midpoint: " << midpoint.transpose();
+  //if(midpoint[2]<0 || midpoint[2]>1000) LOG(WARNING) << "triangulation wrong!";
   return Eigen::Vector4d(midpoint[0], midpoint[1], midpoint[2], 1.0).normalized();
 }
 

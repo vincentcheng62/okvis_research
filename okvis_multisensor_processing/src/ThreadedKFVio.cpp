@@ -573,6 +573,7 @@ void ThreadedKFVio::matchingLoop()
   //long long counter=0;
   for (;;)
   {
+      OptimizationResults result;
       LOG(INFO) << "~~new iteration~~";
     //Frame consumer loop content
     //(1) propagate imu measurement (2) Do detectAndDescribe() (3) Push keypt measurements
@@ -814,6 +815,9 @@ void ThreadedKFVio::matchingLoop()
                                                  map_, frame, &asKeyframe);
       matchingTimer.stop();
 
+      //Get landmarks here since matching will remove outliers
+      estimator_.getLandmarks(result.landmarksVector);
+
       if (asKeyframe)
         estimator_.setKeyframe(frame->id(), asKeyframe);
       if (!blocking_)
@@ -916,7 +920,7 @@ void ThreadedKFVio::matchingLoop()
     LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << ea[0] << ", " << ea[1] << ", " << ea[2] ;
     LOG(INFO) << "SpeedAndBias is: " << SAB.transpose();
 
-    OptimizationResults result;
+
     {
       std::lock_guard<std::mutex> l(estimator_mutex_);
       optimizationTimer.start();
@@ -1014,7 +1018,7 @@ void ThreadedKFVio::matchingLoop()
         {
           result.onlyPublishLandmarks = true;
         }
-        estimator_.getLandmarks(result.landmarksVector);
+        //estimator_.getLandmarks(result.landmarksVector);
 
         repropagationNeeded_ = true;
       }
@@ -1249,7 +1253,7 @@ void ThreadedKFVio::visualizationLoop()
     std::vector<cv::Mat> out_images(parameters_.nCameraSystem.numCameras());
     for (size_t i = 0; i < parameters_.nCameraSystem.numCameras(); ++i)
     {
-      out_images[i] = visualizer_.drawMatches(new_data, i, 1);
+      out_images[i] = visualizer_.drawMatches(new_data, i, 2);
     }
 	displayImages_.PushNonBlockingDroppingIfFull(out_images,1);
   }

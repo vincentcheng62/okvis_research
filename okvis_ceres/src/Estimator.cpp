@@ -425,7 +425,8 @@ bool Estimator::removeObservation(::ceres::ResidualBlockId residualBlockId) {
 
 // Remove an observation from a landmark, if available.
 bool Estimator::removeObservation(uint64_t landmarkId, uint64_t poseId,
-                                  size_t camIdx, size_t keypointIdx) {
+                                  size_t camIdx, size_t keypointIdx)
+{
   if(landmarksMap_.find(landmarkId) == landmarksMap_.end()){
     for (PointMap::iterator it = landmarksMap_.begin(); it!= landmarksMap_.end(); ++it) {
       LOG(INFO) << it->first<<", no. obs = "<<it->second.observations.size();
@@ -1003,6 +1004,14 @@ void Estimator::optimize(size_t numIter, size_t /*numThreads*/,
       // update coordinates
       it->second.point = std::static_pointer_cast<okvis::ceres::HomogeneousPointParameterBlock>(
           mapPtr_->parameterBlockPtr(it->first))->estimate();
+
+      //update distance
+      double dist = std::numeric_limits<double>::max();
+      if(fabs(it->second.point[3])>1.0e-8)
+      {
+        dist = (it->second.point/it->second.point[3]).head<3>().norm(); // euclidean distance
+      }
+      it->second.distance = dist;
     }
   }
 
@@ -1104,7 +1113,11 @@ size_t Estimator::getLandmarks(MapPointVector & landmarks) const
   {
     if(isLandmarkInitialized(it->first)) // only publish initialized (i.e. green) landmark
     {
-        landmarks.push_back(it->second);
+        if(it->second.observations.size()>=2) // since landmark's observation will be removed if it is considered as outlier in ransac step
+        {
+           landmarks.push_back(it->second);
+        }
+
     }
   }
   return landmarksMap_.size();

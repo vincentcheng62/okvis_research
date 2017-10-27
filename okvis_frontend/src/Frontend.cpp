@@ -86,10 +86,12 @@ Frontend::Frontend(size_t numCameras)
       keyframeInsertionMatchingRatioThreshold_(0.2),//default 0.2, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
       rotation_only_ratio_(0.9), // default is 0.8, make it larger so easier to initialize
       ransacinlinersminnumber_(10), // default is 10
-      ransacthreshold_(4), //default is 9, is the reprojection error in pixels?
+      ransacthreshold_(3), //default is 9, is the reprojection error in pixels?
       ransacdebugoutputlevel_(0), //default is 0, 0: no debug info, 1: short summary, 2: output each trial
       ransac_max_iteration_(1000), //default is 50
       required3d2dmatches_(5), //default is 5
+      matchtolastKeyframesnumber_for_3d_(4), //default is 3
+      matchtolastKeyframesnumber_for_2d_(5), //default is 2
       IsOriginalFeatureDetector_(false)
 
 {
@@ -511,7 +513,7 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
     }
 
     kfcounter++;
-    if (kfcounter > 2)
+    if (kfcounter >= matchtolastKeyframesnumber_for_3d_)
       break;
   }
 
@@ -563,7 +565,7 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
     }
 
     kfcounter++;
-    if (kfcounter > 1)
+    if (kfcounter >= matchtolastKeyframesnumber_for_2d_)
     {
       break; // break when already encounter the last keyframe
     }
@@ -889,6 +891,12 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
         size_t keypointIdx = adapter.keypointIndex(k);
         uint64_t lmId = currentFrame->landmarkId(camIdx, keypointIdx);
 
+        MapPoint landmark;
+        estimator.getLandmark(lmId, landmark);
+
+        LOG(INFO) << "Landmarks rejected as outlier in 3d2d: " <<
+                     (landmark.point/landmark.point[3]).transpose();
+
         // reset ID:
         currentFrame->setLandmarkId(camIdx, keypointIdx, 0);
 
@@ -909,7 +917,7 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
   return numInliers;
 }
 
-// Perform 2D/2D RANSAC.
+// Perform 2D/2D RANSAC for initialization.
 // Perform rotation only sac and relative pose sac to see if relative pose result outweighs rotation only sac
 // the model_coefficients_ after ransac is used for pose initialization
 int Frontend::runRansac2d2d(okvis::Estimator& estimator,

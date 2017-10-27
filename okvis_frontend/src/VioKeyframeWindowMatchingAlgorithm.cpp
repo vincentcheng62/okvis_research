@@ -499,6 +499,10 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
     bool valid = probabilisticStereoTriangulator_.stereoTriangulate(
         indexA, indexB, hP_Ca, canBeInitialized,
         std::max(raySigmasA_[indexA], raySigmasB_[indexB]));
+
+    //LOG(INFO) << "hP_Ca: " << hP_Ca.transpose();
+    //LOG(INFO) << "T_WCa_ * hP_Ca: " << (T_WCa_ * hP_Ca).transpose();
+    //if((T_WCa_ * hP_Ca)[2]<0 || (T_WCa_ * hP_Ca)[2]>1000) LOG(WARNING) << "triangulation wrong!";
     if (!valid) {
       return;
     }

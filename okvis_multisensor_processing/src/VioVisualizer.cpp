@@ -179,7 +179,7 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
 
       if (fabs(hP_C[3]) > 1.0e-8)
       {
-        if (hP_C[2] / hP_C[3] < 0.2) // if the landmark is closer than 40cm in the keyframe camera coord
+        if (hP_C[2] / hP_C[3] < 0.1) // if the landmark is closer than 40cm in the keyframe camera coord
         {
           isVisibleInKeyframe = false;
         }

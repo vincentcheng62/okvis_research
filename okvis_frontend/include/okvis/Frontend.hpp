@@ -282,6 +282,8 @@ class Frontend : public VioFrontendInterface {
   size_t ransacdebugoutputlevel_;
   size_t ransac_max_iteration_; ///< the maximum iteration ransac3d2d/2d2d will perform
   size_t required3d2dmatches_;
+  size_t matchtolastKeyframesnumber_for_3d_; ///< number of last key frames to match in order to form reprojection error
+  size_t matchtolastKeyframesnumber_for_2d_; ///< number of last key frames to match in order to triangulate
 
   /**
    * @brief   feature detectors with the current settings.
