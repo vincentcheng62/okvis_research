@@ -53,6 +53,7 @@
 #include <okvis/cameras/EquidistantDistortion.hpp>
 #include <okvis/cameras/RadialTangentialDistortion.hpp>
 #include <okvis/cameras/RadialTangentialDistortion8.hpp>
+#include <iomanip>
 
 /// \brief okvis Main namespace of this package.
 namespace okvis {
@@ -195,6 +196,12 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
         // Draw circle in upper image (i.e. last key frame)
         cv::circle(actKeyframe, cv::Point2f(keyframePt[0], keyframePt[1]),
                    0.5 * it->keypointSize, color, 1, CV_AA);
+
+        // Also print the height of the keypt estimated
+        std::stringstream heighttext;
+        heighttext << std::fixed << std::setprecision(2) << hPoint[2]/hPoint[3] << "m";
+        cv::putText(actKeyframe, heighttext.str(), cv::Point2f(keyframePt[0]+5, keyframePt[1]+5),
+                        cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,255,0), 1);
       }
     }
 

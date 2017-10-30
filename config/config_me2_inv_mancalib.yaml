@@ -15,24 +15,24 @@ cameras:
 
 camera_params:
     camera_rate: 25 # just to manage the expectations of when there should be frames arriving
-    sigma_absolute_translation: 0.0 # The standard deviation of the camera extrinsics translation, e.g. 1.0e-10 for online-calib [m].
-    sigma_absolute_orientation: 0.0 # The standard deviation of the camera extrinsics orientation, e.g. 1.0e-3 for online-calib [rad].
-    sigma_c_relative_translation: 0.0 # The std. dev. of the cam. extr. transl. change between frames, e.g. 1.0e-6 for adaptive online calib (not less for numerics) [m].
-    sigma_c_relative_orientation: 0.0 # The std. dev. of the cam. extr. orient. change between frames, e.g. 1.0e-6 for adaptive online calib (not less for numerics) [rad].
+    sigma_absolute_translation: 0.0 # The standard deviation of the camera extrinsics translation, affect pose error, e.g. 1.0e-10 for online-calib [m].
+    sigma_absolute_orientation: 0.0 # The standard deviation of the camera extrinsics orientation, affect pose error e.g. 1.0e-3 for online-calib [rad].
+    sigma_c_relative_translation: 0.0 # The std. dev. of the cam. extr. transl. change between frames, affect relative pose error e.g. 1.0e-6 for adaptive online calib (not less for numerics) [m].
+    sigma_c_relative_orientation: 0.0 # The std. dev. of the cam. extr. orient. change between frames, affect relative pose error e.g. 1.0e-6 for adaptive online calib (not less for numerics) [rad].
     timestamp_tolerance: 0.005 # [s] stereo frame out-of-sync tolerance
 
 imu_params:
     a_max: 176.0 # acceleration saturation [m/s^2]
     g_max: 7.8 # gyro saturation [rad/s]
 
-    sigma_g_c: 12.0e-4 # gyro noise density [rad/s/sqrt(Hz)], used in covariance propagation
-    sigma_a_c: 8.0e-3 # accelerometer noise density [m/s^2/sqrt(Hz)], used in covariance propagation
+    sigma_g_c: 12.0e-4 # gyro noise density [rad/s/sqrt(Hz)], used in covariance propagation, affect the information matrix of imu error
+    sigma_a_c: 8.0e-3 # accelerometer noise density [m/s^2/sqrt(Hz)], used in covariance propagation, affect the information matrix of imu error
 
     sigma_bg: 0.03 # gyro bias prior [rad/s], used in addStates() when statesMap_.size() == 1 as prior
     sigma_ba: 0.1 # accelerometer bias prior [m/s^2], used in addStates() when statesMap_.size() == 1 as prior
 
-    sigma_gw_c: 4.0e-6 # gyro drift noise density [rad/s^s/sqrt(Hz)], used in covariance propagation
-    sigma_aw_c: 4.0e-5 # accelerometer drift noise density [m/s^2/sqrt(Hz)], used in covariance propagation
+    sigma_gw_c: 4.0e-6 # gyro drift noise density [rad/s^s/sqrt(Hz)], used in covariance propagation, affect the information matrix of imu error
+    sigma_aw_c: 4.0e-5 # accelerometer drift noise density [m/s^2/sqrt(Hz)], used in covariance propagation, affect the information matrix of imu error
 
     tau: 3600.0 # reversion time constant, currently not in use [s]
     g: 9.81007 # Earth's acceleration due to gravity [m/s^2]
@@ -64,7 +64,7 @@ detection_options:
     matching_ratio_threshold: 1.5 # the ratio threshold s.t. second/best>threshold will be matched
     octaves: 3           # number of octaves for detection. 0 means single-scale at highest resolution
     maxNoKeypoints: 400  # restrict to a maximum of this many keypoints per image (strongest ones)
-    IsHarris: true        # is using Fast or sse Harris corner detector (the original)
+    IsHarris: false        # is using Fast or sse Harris corner detector (the original)
     rotation_only_threshold: 0.92   # default is 0.8, higher will make initialization easier but have a higher chance of orientation initialization only
 
 # delay of images [s]:

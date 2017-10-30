@@ -571,6 +571,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
     // T_WCa_ = T_WSa_ * T_SaCa_;
     if (insertHomogeneousPointParameterBlock)
     {
+      //Add HomogeneousPointParameterBlock
       estimator_->addLandmark(lmId, T_WCa_ * hP_Ca); // mapPtr_->addParameterBlock() which will be used in ceres
       OKVIS_ASSERT_TRUE(Exception, estimator_->isLandmarkAdded(lmId),
                         lmId<<" not added, bug");

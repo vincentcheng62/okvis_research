@@ -82,8 +82,8 @@ Frontend::Frontend(size_t numCameras)
       briskMatchingRatioThreshold_(3.0),
       matcher_(
           std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(1, 4, true))), // default 4: 4 matcher threads, 4 num of best, dont use distance ratio
-      keyframeInsertionOverlapThreshold_(0.8), // default 0.6, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
-      keyframeInsertionMatchingRatioThreshold_(0.4),//default 0.2, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
+      keyframeInsertionOverlapThreshold_(0.9), // default 0.6, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
+      keyframeInsertionMatchingRatioThreshold_(0.5),//default 0.2, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
       rotation_only_ratio_(0.9), // default is 0.8, make it larger so easier to initialize
       ransacinlinersminnumber_(10), // default is 10
       ransacthreshold_(2), //default is 9, is the reprojection error in pixels?
@@ -545,8 +545,7 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
     bool rotationOnly_tmp = false;
     if (isInitialized_)
     {
-        // remove outliers
-        // only do RANSAC 3D2D with most recent KF
+        // only do RANSAC 3D2D with most recent KF to remove outlier
         if (kfcounter == 0)
           runRansac3d2d(estimator, params.nCameraSystem,
                         estimator.multiFrame(currentFrameId), removeOutliers);
@@ -1107,8 +1106,11 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
         //Use the translation of the imu guess to scale the ransac result
         //Project T_C1C2.r() onto T_C1C2_mat.topRightCorner<3, 1>() and get the vector projection
         T_C1C2_mat.topRightCorner<3, 1>() = T_C1C2_mat.topRightCorner<3, 1>()
-            * std::max( 0.0, double(T_C1C2_mat.topRightCorner<3, 1>().transpose() * T_C1C2.r())  // r(): translation vector
-                        /*double(T_C1C2_mat.topRightCorner<3, 1>().transpose()*T_C1C2_mat.topRightCorner<3, 1>())*/);
+            * std::max( 0.0, double(T_C1C2_mat.topRightCorner<3, 1>().transpose() * T_C1C2.r())/  // r(): translation vector
+                        double(T_C1C2_mat.topRightCorner<3, 1>().transpose()*T_C1C2_mat.topRightCorner<3, 1>()));
+
+        LOG(INFO) << "Scale corrected T_C1C2: " << T_C1C2_mat ;
+        LOG(INFO) << "Before init pose T_WS=" << T_WS0.T();
       }
       else
       {
@@ -1116,11 +1118,18 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
         T_C1C2_mat.topLeftCorner<3, 3>() = rotation_only_ransac.model_coefficients_;
       }
 
+
       // set., id0 is currentframeID
       // So it goes from (1) world to sensor of lastframe (2) sensor to camera of lastframe
       // (3) camera of lastframe to camera of current frame (4) camera to sensor of currentframe
       estimator.set_T_WS(id0, T_WSA * T_SCA * okvis::kinematics::Transformation(T_C1C2_mat)
               * T_SC0.inverse());
+
+      if (rel_pose_success)
+      {
+          estimator.get_T_WS(id0, T_WS0);
+          LOG(INFO) << "After init pose T_WS=" << T_WS0.T();
+      }
     }
   }
 

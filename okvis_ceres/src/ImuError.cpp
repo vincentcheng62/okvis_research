@@ -72,7 +72,7 @@ ImuError::ImuError(const okvis::ImuMeasurementDeque & imuMeasurements,
                      "Last IMU measurement included in ImuError is not new enough!");
 }
 
-// Propagates pose, speeds and biases with given IMU measurements.
+//Calculate reference (linearisation) point and information matrix
 int ImuError::redoPreintegration(const okvis::kinematics::Transformation& /*T_WS*/,
                                  const okvis::SpeedAndBias & speedAndBiases) const {
 
@@ -113,7 +113,8 @@ int ImuError::redoPreintegration(const okvis::kinematics::Transformation& /*T_WS
   bool hasStarted = false;
   int i = 0;
   for (okvis::ImuMeasurementDeque::const_iterator it = imuMeasurements_.begin();
-      it != imuMeasurements_.end(); ++it) {
+      it != imuMeasurements_.end(); ++it)
+  {
 
     Eigen::Vector3d omega_S_0 = it->measurement.gyroscopes;
     Eigen::Vector3d acc_S_0 = it->measurement.accelerometers;
@@ -122,13 +123,17 @@ int ImuError::redoPreintegration(const okvis::kinematics::Transformation& /*T_WS
 
     // time delta
     okvis::Time nexttime;
-    if ((it + 1) == imuMeasurements_.end()) {
+    if ((it + 1) == imuMeasurements_.end())
+    {
       nexttime = t1_;
-    } else
+    }
+    else
       nexttime = (it + 1)->timeStamp;
+
     double dt = (nexttime - time).toSec();
 
-    if (end < nexttime) {
+    if (end < nexttime)
+    {
       double interval = (nexttime - it->timeStamp).toSec();
       nexttime = t1_;
       dt = (nexttime - time).toSec();
@@ -140,6 +145,7 @@ int ImuError::redoPreintegration(const okvis::kinematics::Transformation& /*T_WS
     if (dt <= 0.0) {
       continue;
     }
+
     Delta_t += dt;
 
     if (!hasStarted) {
@@ -183,6 +189,7 @@ int ImuError::redoPreintegration(const okvis::kinematics::Transformation& /*T_WS
     dq.vec() = sinc_theta_half * omega_S_true * 0.5 * dt;
     dq.w() = cos_theta_half;
     Eigen::Quaterniond Delta_q_1 = Delta_q_ * dq;
+
     // rotation matrix integral:
     const Eigen::Matrix3d C = Delta_q_.toRotationMatrix();
     const Eigen::Matrix3d C_1 = Delta_q_1.toRotationMatrix();
@@ -191,6 +198,7 @@ int ImuError::redoPreintegration(const okvis::kinematics::Transformation& /*T_WS
     const Eigen::Matrix3d C_integral_1 = C_integral_ + 0.5 * (C + C_1) * dt;
     const Eigen::Vector3d acc_integral_1 = acc_integral_
         + 0.5 * (C + C_1) * acc_S_true * dt;
+
     // rotation matrix double integral:
     C_doubleintegral_ += C_integral_ * dt + 0.25 * (C + C_1) * dt * dt;
     acc_doubleintegral_ += acc_integral_ * dt
@@ -207,8 +215,7 @@ int ImuError::redoPreintegration(const okvis::kinematics::Transformation& /*T_WS
         + 0.25 * dt * dt * (C * acc_S_x * cross_ + C_1 * acc_S_x * cross_1);
 
     // covariance propagation
-    Eigen::Matrix<double, 15, 15> F_delta =
-        Eigen::Matrix<double, 15, 15>::Identity();
+    Eigen::Matrix<double, 15, 15> F_delta = Eigen::Matrix<double, 15, 15>::Identity();
     // transform
     F_delta.block<3, 3>(0, 3) = -okvis::kinematics::crossMx(
         acc_integral_ * dt + 0.25 * (C + C_1) * acc_S_true * dt * dt);
@@ -223,9 +230,14 @@ int ImuError::redoPreintegration(const okvis::kinematics::Transformation& /*T_WS
     F_delta.block<3, 3>(6, 9) = 0.5 * dt
         * (C * acc_S_x * cross_ + C_1 * acc_S_x * cross_1);
     F_delta.block<3, 3>(6, 12) = -0.5 * (C + C_1) * dt;
+
     P_delta_ = F_delta * P_delta_ * F_delta.transpose();
+
     // add noise. Note that transformations with rotation matrices can be ignored, since the noise is isotropic.
     //F_tot = F_delta*F_tot;
+
+    //The following addition to covariance matrix is completely determined by the config file input
+    //sigma_g_c, sigma_a_c, sigma_gw_c, sigma_aw_c
     const double sigma2_dalpha = dt * sigma_g_c
         * sigma_g_c;
     P_delta_(3, 3) += sigma2_dalpha;
@@ -268,11 +280,13 @@ int ImuError::redoPreintegration(const okvis::kinematics::Transformation& /*T_WS
 
   // get the weighting:
   // enforce symmetric
-  P_delta_ = 0.5 * P_delta_ + 0.5 * P_delta_.transpose().eval();
+  P_delta_ = 0.5*(P_delta_ + P_delta_.transpose().eval());
 
   // calculate inverse
   information_ = P_delta_.inverse();
-  information_ = 0.5 * information_ + 0.5 * information_.transpose().eval();
+  information_ = 0.5 *(information_ + information_.transpose().eval());
+
+  //information_ *= 1.8; // increase error weighting of imu-> trust more imu, only for debug
 
   // square root
   Eigen::LLT<information_t> lltOfInformation(information_);
@@ -543,7 +557,8 @@ bool ImuError::Evaluate(double const* const * parameters, double* residuals,
 bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
                                             double* residuals,
                                             double** jacobians,
-                                            double** jacobiansMinimal) const {
+                                            double** jacobiansMinimal) const
+{
 
   // get poses
   const okvis::kinematics::Transformation T_WS_0(
@@ -575,10 +590,17 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
     Delta_b = speedAndBiases_0.tail<6>()
           - speedAndBiases_ref_.tail<6>();
   }
+
+  //redo_ default ia true
+  //If gyro bias is different from the reference large enough, redo preintegration
   redo_ = redo_ || (Delta_b.head<3>().norm() * Delta_t > 0.0001);
-  if (redo_) {
+  if (redo_)
+  {
+    LOG(INFO) << "Redo preintegration since Delta_b.head<3>().norm() * Delta_t=" << Delta_b.head<3>().norm() * Delta_t  << " > 0.0001";
+    //Calculate reference (linearisation) point and information matrix
     redoPreintegration(T_WS_0, speedAndBiases_0);
-    redoCounter_++;
+    redoCounter_++; // no actual use
+    LOG(INFO) << "redoCounter_: " << redoCounter_;
     Delta_b.setZero();
     redo_ = false;
     /*if (redoCounter_ > 1) {
@@ -634,8 +656,10 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
     weighted_error = squareRootInformation_ * error;
 
     // get the Jacobians
-    if (jacobians != NULL) {
-      if (jacobians[0] != NULL) {
+    if (jacobians != NULL)
+    {
+      if (jacobians[0] != NULL)
+      {
         // Jacobian w.r.t. minimal perturbance
         Eigen::Matrix<double, 15, 6> J0_minimal = squareRootInformation_
             * F0.block<15, 6>(0, 0);
@@ -657,8 +681,11 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
             J0_minimal_mapped = J0_minimal;
           }
         }
+
       }
-      if (jacobians[1] != NULL) {
+
+      if (jacobians[1] != NULL)
+      {
         Eigen::Map<Eigen::Matrix<double, 15, 9, Eigen::RowMajor> > J1(
             jacobians[1]);
         J1 = squareRootInformation_ * F0.block<15, 9>(0, 6);
@@ -671,8 +698,10 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
             J1_minimal_mapped = J1;
           }
         }
+
       }
-      if (jacobians[2] != NULL) {
+      if (jacobians[2] != NULL)
+      {
         // Jacobian w.r.t. minimal perturbance
         Eigen::Matrix<double, 15, 6> J2_minimal = squareRootInformation_
                     * F1.block<15, 6>(0, 0);
@@ -694,8 +723,10 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
             J2_minimal_mapped = J2_minimal;
           }
         }
+
       }
-      if (jacobians[3] != NULL) {
+      if (jacobians[3] != NULL)
+      {
         Eigen::Map<Eigen::Matrix<double, 15, 9, Eigen::RowMajor> > J3(jacobians[3]);
         J3 = squareRootInformation_ * F1.block<15, 9>(0, 6);
 
@@ -708,6 +739,7 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
           }
         }
       }
+
     }
   }
   return true;

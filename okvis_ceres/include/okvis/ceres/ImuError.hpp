@@ -272,7 +272,7 @@ class ImuError :
   mutable int redoCounter_ = 0; ///< Counts the number of preintegrations for statistics.
 
   // information matrix and its square root
-  mutable information_t information_; ///< The information matrix for this error term.
+  mutable information_t information_; ///< The information matrix for this error term, only evaluate in redoPreintegration()
   mutable information_t squareRootInformation_; ///< The square root information matrix for this error term.
 
 };

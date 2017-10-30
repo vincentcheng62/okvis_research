@@ -57,7 +57,7 @@ Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1, // center of A in A c
                                 bool& isValid, bool& isParallel)
 {
   const double initialdepthguess = 1000.0;
-  const double inversecheckthreshold = 2.739*1e-3; //3.0458*1e-4; //  default is 1.0e-6
+  const double inversecheckthreshold = 6.8523*1e-4; //  default is 1.0e-6
 
   isParallel = false; // This should be the default, whether e1 and e2 are parallel
   // But parallel and invalid is not the same. Points at infinity are valid and parallel.
@@ -84,7 +84,11 @@ Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1, // center of A in A c
   //     [ |e1||e2|cosr   -|e2|^2       ]
   // det(A) = -(|e1||e2|)^2 + (|e1||e2|)^2 * (cosr)^2 = (|e1||e2|)^2 ((cosr)^2-1)
   // since e1 and e2 are unit vector, det(A) = ((cosr)^2-1) = -(sinr)^2
+
+  // If >=0.5 degree is allowed, then det(A) = 7.6152*1e-5
   // If >=1 degree is allowed, then det(A) = 3.0458*1e-4
+  // If >=1.5 degree is allowed, then det(A) = 6.8523*1e-4
+  // If >=2 degree is allowed, then det(A) = 1.2179*1e-3
   // If >=3 degree is allowed, then det(A) = 2.739*1e-3
   Eigen::Matrix2d A;
   A(0, 0) = e1.dot(e1);

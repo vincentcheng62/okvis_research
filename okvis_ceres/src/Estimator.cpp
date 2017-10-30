@@ -179,6 +179,7 @@ bool Estimator::addStates(
       statesMap_.find(states.id)==statesMap_.end(),
       "pose ID" <<states.id<<" was used before!");
 
+  // poseParameterBlock
   // create global states
   std::shared_ptr<okvis::ceres::PoseParameterBlock> poseParameterBlock(
       new okvis::ceres::PoseParameterBlock(T_WS, states.id,
@@ -203,6 +204,7 @@ bool Estimator::addStates(
   std::map<uint64_t, States>::reverse_iterator lastElementIterator = statesMap_.rbegin();
   lastElementIterator++;
 
+  // extrinsicsParameterBlockPtr
   // initialize new sensor states
   // cameras:
   for (size_t i = 0; i < extrinsicsEstimationParametersVec_.size(); ++i)// for # of cameras
@@ -235,6 +237,7 @@ bool Estimator::addStates(
     states.sensors.at(SensorStates::Camera).push_back(cameraInfos);
   }
 
+  // speedAndBiasParameterBlock
   // IMU states are automatically propagated.
   for (size_t i=0; i<imuParametersVec_.size(); ++i)
   {
@@ -252,6 +255,7 @@ bool Estimator::addStates(
     states.sensors.at(SensorStates::Imu).push_back(imuInfo);
   }
 
+  // IMU error
   // depending on whether or not this is the very beginning,
   // we will add priors or relative terms to the last state:
   if (statesMap_.size() == 1)
