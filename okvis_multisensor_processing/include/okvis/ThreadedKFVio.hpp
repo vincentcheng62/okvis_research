@@ -303,6 +303,7 @@ class ThreadedKFVio : public VioInterface {
     okvis::MapPointVector landmarksVector;      ///< Vector containing the current landmarks.
     okvis::MapPointVector transferredLandmarks; ///< Vector of the landmarks that have been marginalized out.
     bool onlyPublishLandmarks;                  ///< Boolean to signalise the publisherLoop() that only the landmarks should be published
+    bool IsInitialized;
   };
 
   /// @name State variables
@@ -325,6 +326,7 @@ class ThreadedKFVio : public VioInterface {
   /// \brief Timestamp of newest frame used in the last optimization.
   /// \warning Lock lastState_mutex_.
   okvis::Time lastOptimizedStateTimestamp_;
+  bool lastIsInitialized_=false;
   /// This is set to true after optimization to signal the IMU consumer loop to repropagate
   /// the state from the lastOptimizedStateTimestamp_.
   std::atomic_bool repropagationNeeded_;

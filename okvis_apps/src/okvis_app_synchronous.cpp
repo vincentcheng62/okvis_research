@@ -770,7 +770,8 @@ class PoseViewer
       publishlmcounter++;
   }
 
-
+long gotinitID=-1;
+double initZ=0;
   // this we can register as a callback, so will run whether a new state is estimated
   void publishFullStateAsCallback(
       const okvis::Time &t,
@@ -778,7 +779,8 @@ class PoseViewer
       const Eigen::Matrix<double, 9, 1> & speedAndBiases,
       const Eigen::Matrix<double, 3, 1> &omega_S ,
       const std::vector<okvis::kinematics::Transformation,
-              Eigen::aligned_allocator<okvis::kinematics::Transformation> > extrinsic)
+      Eigen::aligned_allocator<okvis::kinematics::Transformation> > extrinsic,
+      const bool IsInitialized)
   {
 
     // just append the path
@@ -791,6 +793,12 @@ class PoseViewer
         total_length_of_travel += dist;
     }
     _path.push_back(cv::Point2d(r[0], r[1]));
+
+    if(IsInitialized && gotinitID<0)
+    {
+        gotinitID = _path.size()-1;
+        initZ=r[2];
+    }
 
 
 
@@ -868,6 +876,14 @@ class PoseViewer
     cv::putText(_image, accbiastext.str(), cv::Point(15,95),
                     cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
 
+    if(gotinitID>=0)
+    {
+        std::stringstream postext;
+        postext << "Init position at gotinitID=" << gotinitID << " [" << _path[gotinitID].x << ", " << _path[gotinitID].y << ", " << initZ << "]";
+        cv::putText(_image, postext.str(), cv::Point(15,115),
+                    cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
+    }
+
     //Also output the position, angle and velocity to result.txt
     fp << r[0] << ", " << r[1] << ", " << r[2] << ", ";
     fp << ea[0] << ", " << ea[1] << ", " << ea[2] << ", ";
@@ -904,12 +920,12 @@ class PoseViewer
       cv::Point2d p1 = convertToImageCoordinates(_path[i + 1]);
       cv::Point2d diff = p1-p0;
 
-      if(diff.dot(diff)<2.0)
-      {
-        _path.erase(_path.begin() + i + 1);  // clean short segment
-        _heights.erase(_heights.begin() + i + 1);
-        continue;
-      }
+//      if(diff.dot(diff)<2.0)
+//      {
+//        _path.erase(_path.begin() + i + 1);  // clean short segment
+//        _heights.erase(_heights.begin() + i + 1);
+//        continue;
+//      }
 
       //Purple: 0 level, Red: higher height, Blue: lower height
       double rel_height = (_heights[i] - _min_z + _heights[i + 1] - _min_z)
@@ -923,13 +939,22 @@ class PoseViewer
           1, CV_AA);
 
 
-      //For the start, draw a cross to indicate
+      //For the start, draw a green cross to indicate
       if(i==0)
       {
           cv::line(_image, cv::Point2d(p0.x-30, p0.y), cv::Point2d(p0.x+30, p0.y), cv::Scalar(0, 255, 0), 3);
           cv::line(_image, cv::Point2d(p0.x, p0.y-30), cv::Point2d(p0.x, p0.y+30), cv::Scalar(0, 255, 0), 3);
           cv::putText(_image, "Start", cv::Point(p0.x+20,p0.y+20),
                       cv::FONT_HERSHEY_COMPLEX, 1.5, cv::Scalar(0,255,0), 3);
+      }
+
+      //Draw a red cross to indicate the position where it got initialized
+      if(i==gotinitID)
+      {
+          cv::line(_image, cv::Point2d(p0.x-30, p0.y), cv::Point2d(p0.x+30, p0.y), cv::Scalar(0, 0, 255), 2);
+          cv::line(_image, cv::Point2d(p0.x, p0.y-30), cv::Point2d(p0.x, p0.y+30), cv::Scalar(0, 0, 255), 2);
+          cv::putText(_image, "Init", cv::Point(p0.x+20,p0.y+20),
+                      cv::FONT_HERSHEY_COMPLEX, 1.5, cv::Scalar(0,0,255), 2);
       }
 
       i++;
@@ -1354,8 +1379,8 @@ int main(int argc, char **argv)
 
   okvis_estimator.setFullStateCallbackWithExtrinsics(
       std::bind(&PoseViewer::publishFullStateAsCallback, &poseViewer,
-                std::placeholders::_1, std::placeholders::_2,
-                std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
+                std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
   //So the function returned still have 4 variables
 
 

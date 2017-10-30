@@ -82,16 +82,16 @@ Frontend::Frontend(size_t numCameras)
       briskMatchingRatioThreshold_(3.0),
       matcher_(
           std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(1, 4, true))), // default 4: 4 matcher threads, 4 num of best, dont use distance ratio
-      keyframeInsertionOverlapThreshold_(0.6), // default 0.6, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
-      keyframeInsertionMatchingRatioThreshold_(0.2),//default 0.2, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
+      keyframeInsertionOverlapThreshold_(0.8), // default 0.6, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
+      keyframeInsertionMatchingRatioThreshold_(0.4),//default 0.2, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
       rotation_only_ratio_(0.9), // default is 0.8, make it larger so easier to initialize
       ransacinlinersminnumber_(10), // default is 10
-      ransacthreshold_(3), //default is 9, is the reprojection error in pixels?
+      ransacthreshold_(2), //default is 9, is the reprojection error in pixels?
       ransacdebugoutputlevel_(0), //default is 0, 0: no debug info, 1: short summary, 2: output each trial
       ransac_max_iteration_(1000), //default is 50
       required3d2dmatches_(5), //default is 5
-      matchtolastKeyframesnumber_for_3d_(4), //default is 3
-      matchtolastKeyframesnumber_for_2d_(5), //default is 2
+      matchtolastKeyframesnumber_for_3d_(15), //default is 3
+      matchtolastKeyframesnumber_for_2d_(15), //default is 2
       IsOriginalFeatureDetector_(false)
 
 {
@@ -537,8 +537,8 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
 
       // match 2D-2D for initialization of new (mono-)correspondences
       matcher_->match<MATCHING_ALGORITHM>(matchingAlgorithm);
-      retCtr += matchingAlgorithm.numMatches();
-      numUncertainMatches += matchingAlgorithm.numUncertainMatches();
+      //retCtr += matchingAlgorithm.numMatches();
+      //numUncertainMatches += matchingAlgorithm.numUncertainMatches();
       LOG(INFO) << "olderFrameId: " << olderFrameId << ", MatchToKeyFrame(Match2D2D).numMatches(): " << matchingAlgorithm.numMatches();
     }
 
@@ -894,8 +894,8 @@ int Frontend::runRansac3d2d(okvis::Estimator& estimator,
         MapPoint landmark;
         estimator.getLandmark(lmId, landmark);
 
-        LOG(INFO) << "Landmarks rejected as outlier in 3d2d: " <<
-                     (landmark.point/landmark.point[3]).transpose();
+        //LOG(INFO) << "Landmarks rejected as outlier in 3d2d: " <<
+        //             (landmark.point/landmark.point[3]).transpose();
 
         // reset ID:
         currentFrame->setLandmarkId(camIdx, keypointIdx, 0);

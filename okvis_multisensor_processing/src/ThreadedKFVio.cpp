@@ -81,7 +81,7 @@ ThreadedKFVio::ThreadedKFVio(okvis::VioParameters& parameters)
       frontend_(parameters.nCameraSystem.numCameras()),
       parameters_(parameters),
       IsImageNormalized_(true),
-      GammaCorrectionFactor_(3.5f),
+      GammaCorrectionFactor_(4.0f),
       maxImuInputQueueSize_(2 * max_camera_input_queue_size * parameters.imu.rate
               / parameters.sensors_information.cameraRate)
 {
@@ -1019,6 +1019,7 @@ void ThreadedKFVio::matchingLoop()
           result.onlyPublishLandmarks = true;
         }
         //estimator_.getLandmarks(result.landmarksVector);
+        lastIsInitialized_ = isInit;
 
         repropagationNeeded_ = true;
       }
@@ -1196,6 +1197,7 @@ void ThreadedKFVio::imuConsumerLoop()
       result.speedAndBiases = speedAndBiases_propagated_;
       result.omega_S = imuMeasurements_.back().measurement.gyroscopes
           - speedAndBiases_propagated_.segment<3>(3);
+      result.IsInitialized = lastIsInitialized_;
 
       for (size_t i = 0; i < parameters_.nCameraSystem.numCameras(); ++i)
       {
@@ -1513,7 +1515,7 @@ void ThreadedKFVio::publisherLoop()
     if (fullStateCallbackWithExtrinsics_ && !result.onlyPublishLandmarks)
       fullStateCallbackWithExtrinsics_(result.stamp, result.T_WS,
                                        result.speedAndBiases, result.omega_S,
-                                       result.vector_of_T_SCi);
+                                       result.vector_of_T_SCi, result.IsInitialized);
     if (landmarksCallback_ && !result.landmarksVector.empty())
       landmarksCallback_(result.stamp, result.landmarksVector,
                          result.transferredLandmarks);  //TODO(gohlp): why two maps?

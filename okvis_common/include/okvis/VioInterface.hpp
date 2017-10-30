@@ -69,10 +69,12 @@ class VioInterface {
 
   typedef std::function<
   void(const okvis::Time &, const okvis::kinematics::Transformation &)> StateCallback;
+
   typedef std::function<
       void(const okvis::Time &, const okvis::kinematics::Transformation &,
            const Eigen::Matrix<double, 9, 1> &,
            const Eigen::Matrix<double, 3, 1> &)> FullStateCallback;
+
   typedef std::function<
       void(
           const okvis::Time &,
@@ -80,7 +82,9 @@ class VioInterface {
           const Eigen::Matrix<double, 9, 1> &,
           const Eigen::Matrix<double, 3, 1> &,
           const std::vector<okvis::kinematics::Transformation,
-              Eigen::aligned_allocator<okvis::kinematics::Transformation> >&)> FullStateCallbackWithExtrinsics;
+              Eigen::aligned_allocator<okvis::kinematics::Transformation> >&,
+          const bool)> FullStateCallbackWithExtrinsics;
+
   typedef Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> EigenImage;
   typedef std::function<
       void(const okvis::Time &, const okvis::MapPointVector &,

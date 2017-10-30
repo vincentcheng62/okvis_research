@@ -173,6 +173,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
   skipA_.clear();
   skipA_.resize(numA, false);
   raySigmasA_.resize(numA);
+  int gotprojectedPtACounter=0, gotobservredPtACounter=0, AIsLandMark=0, InitedLandmark=0;
 
   // calculate projections only once
   if (matchingType_ == Match3D2D)
@@ -196,6 +197,8 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
         continue;
       }
 
+      AIsLandMark++;
+
       okvis::MapPoint landmark;
       estimator_->getLandmark(lm_id, landmark);
       Eigen::Vector4d hp_W = landmark.point;
@@ -205,6 +208,8 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
         skipA_[k] = true;
         continue;
       }
+
+      InitedLandmark++;
 
       // project (distorted)
       Eigen::Vector2d kptB;
@@ -217,12 +222,16 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
         continue;
       }
 
+      gotprojectedPtACounter++;
+
       if (landmark.observations.size() < 2)
       {
         estimator_->setLandmarkInitialized(lm_id, false);
         skipA_[k] = true;
         continue;
       }
+
+       gotobservredPtACounter++;
 
       // project and get uncertainty
       Eigen::Matrix<double, 2, 4> jacobian;
@@ -240,6 +249,9 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
       keypointAStdDev = 0.8 * keypointAStdDev / 12.0;
       raySigmasA_[k] = sqrt(sqrt(2)) * keypointAStdDev / fA_;  // (sqrt(MeasurementCovariance.norm()) / _fA)
     }
+
+    LOG(INFO) << "landmark got projected: " << gotobservredPtACounter << "/" <<
+                 gotprojectedPtACounter << "/" << InitedLandmark << "/" << AIsLandMark;
 
 //    LOG(INFO) << "dosetup (3D2D) projectionsIntoBUncertainties_: " << projectionsIntoBUncertainties_.transpose();
 //    LOG(INFO) << "dosetup (3D2D) projectionsIntoB_: " << projectionsIntoB_.transpose();
@@ -479,7 +491,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
   if (matchingType_ == Match2D2D)
   {
 
-    // check that not both are set (e.g. none of them is landmark already)
+    // check that not both are set (e.g. not both of them are landmark already)
     if (lmIdA != 0 && lmIdB != 0) {
       return;
     }
@@ -523,7 +535,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
     bool insertHomogeneousPointParameterBlock = false; // it determines whether a keypoint will be added to landmark
     uint64_t lmId = 0;  // 0 just to avoid warning
 
-    if (insertA && insertB)
+    if (insertA && insertB) // both are not landmark
     {
       // ok, we need to assign a new Id...
       lmId = okvis::IdProvider::instance().newId();
@@ -534,9 +546,9 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
       // and add it to the graph
       insertHomogeneousPointParameterBlock = true;
     }
-    else // never go into it???? otherwise already return at line430
+    else // it happens when one is a new keypt while another is a keypt that is triangulated already
     {
-      if (!insertA)
+      if (!insertA) // If A already is a landmark
       {
         lmId = lmIdA;
         if (!estimator_->isLandmarkAdded(lmId)) {
