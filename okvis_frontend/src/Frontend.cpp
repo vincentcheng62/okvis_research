@@ -90,8 +90,8 @@ Frontend::Frontend(size_t numCameras)
       ransacdebugoutputlevel_(0), //default is 0, 0: no debug info, 1: short summary, 2: output each trial
       ransac_max_iteration_(1000), //default is 50
       required3d2dmatches_(5), //default is 5
-      matchtolastKeyframesnumber_for_3d_(15), //default is 3
-      matchtolastKeyframesnumber_for_2d_(15), //default is 2
+      matchtolastKeyframesnumber_for_3d_(10), //default is 3
+      matchtolastKeyframesnumber_for_2d_(10), //default is 2
       IsOriginalFeatureDetector_(false)
 
 {

@@ -11,10 +11,10 @@
 ../config/config_me2_inv_mancalib.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1506393299
 
 //ceiling 28sec loop slow init 
-../config/config_me2_inv_mancalib.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1506406369
+../config/config_me2_inv_mancalib.yaml /home/vincent/okvis_test_data/ceiling_28sec_25m_lowspeedinit
 
 //ceiling of fuyong 2 mins
-../config/config_me2_inv_mancalib.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1506484411
+../config/config_me2_inv_mancalib.yaml /home/vincent/okvis_test_data/fuyong
 
 side view loop
 ../config/config_me2_inv_mancalib.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1505790275
@@ -29,10 +29,31 @@ ceiling_outside_office_entirely_50000frames
 ../config/config_me2_inv_mancalib.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1507088297
 
 5f_straight_corridor
-../config/config_me2_inv_mancalib.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1508836132
+../config/config_me2_inv_mancalib.yaml /home/vincent/okvis_test_data/5f_corridor
 
 base_mall
-../config/config_me2_inv_mancalib.yaml /home/vincent/flycapture/src/creadersync/ReleaseBuild/1508836479
+../config/config_me2_inv_mancalib.yaml /home/vincent/okvis_test_data/basement
+
+outsideoffice_ceiling_again
+../config/config_me2_inv_mancalib.yaml /home/vincent/okvis_test_data/outsideoffice_ceiling_again
+
+5f_7block_straight_again
+../config/config_me2_inv_mancalib.yaml /home/vincent/okvis_test_data/5f_7block_straight_again
+
+2f_7blockplus_straight
+../config/config_me2_inv_mancalib.yaml /home/vincent/okvis_test_data/2f_7blockplus_straight
+
+5f_4block_no_wall_at_init
+../config/config_me2_inv_mancalib.yaml /home/vincent/okvis_test_data/5f_4block_no_wall_at_init
+
+hkoffice_5rounds
+../config/config_me2_inv_mancalib.yaml /home/vincent/okvis_test_data/hkoffice_5rounds
+
+hkoffice_3round
+../config/config_me2_inv_mancalib.yaml /home/vincent/okvis_test_data/hkoffice_3round
+
+2f_2whole_rounds
+../config/config_me2_inv_mancalib.yaml /home/vincent/okvis_test_data/2f_2whole_rounds
 
 
 

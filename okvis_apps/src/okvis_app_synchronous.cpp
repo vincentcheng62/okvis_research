@@ -45,7 +45,7 @@
     #define USBPORTNAME QString("ttyUSB")
 #endif
 
-#define PLAY_DELAY_IN_MS (100) // 0 is stop
+#define PLAY_DELAY_IN_MS (10) // 0 is stop
 #define DEFAULT_CONFIG_FILE ("../config/config_me2_inv_mancalib.yaml")
 
 namespace fs = std::experimental::filesystem;
@@ -723,6 +723,9 @@ void ReadIMUdata(QSerialPort &serialPort, okvis::ThreadedKFVio &okvis_estimator)
     ManualStop=true;
 }
 
+
+
+cv::Point2d mousept(-9999,-9999);
 class PoseViewer
 {
  public:
@@ -733,12 +736,12 @@ class PoseViewer
   std::vector<cv::Point2d> _path;
   std::vector<double> _heights;
   double _scale = 1.0;
-  double _min_x = -0.5;
-  double _min_y = -0.5;
-  double _min_z = -0.5;
-  double _max_x = 0.5;
-  double _max_y = 0.5;
-  double _max_z = 0.5;
+  double _min_x = -1.5;
+  double _min_y = -1.5;
+  double _min_z = -1.5;
+  double _max_x = 1.5;
+  double _max_y = 1.5;
+  double _max_z = 1.5;
   const double _frameScale = 0.2;  // [m]
   std::atomic_bool drawing_;
   std::atomic_bool showing_;
@@ -746,9 +749,13 @@ class PoseViewer
   PoseViewer()
   {
     cv::namedWindow("Top View");
+    //cv::setMouseCallback("Top View", mouse_callback);
     _image.create(imageSize, imageSize, CV_8UC3);
     drawing_ = false;
     showing_ = false;
+//    _scale = 1.0;
+//    _min_x = -1.5;
+//    _min_y = -1.5;
   }
 
   const int publishlmfreq = 20;
@@ -861,6 +868,14 @@ double initZ=0;
     cv::putText(_image, rotationtext.str(), cv::Point(15,35),
                 cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
 
+    if(mousept.x>-1000 && mousept.y>-1000)
+    {
+        std::stringstream postext;
+        postext << "mouse position = [" << mousept.x << ", " << mousept.y << "]";
+        cv::putText(_image, postext.str(), cv::Point(15,75),
+                    cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
+    }
+
     std::stringstream veltext;
     veltext << "velocity = [" << speedAndBiases[0] << ", " << speedAndBiases[1] << ", " << speedAndBiases[2] << "]";
     cv::putText(_image, veltext.str(), cv::Point(15,55),
@@ -868,19 +883,19 @@ double initZ=0;
 
     std::stringstream gyrobiastext;
     gyrobiastext << "gyrobias = [" << speedAndBiases[3] << ", " << speedAndBiases[4] << ", " << speedAndBiases[5] << "]";
-    cv::putText(_image, gyrobiastext.str(), cv::Point(15,75),
+    cv::putText(_image, gyrobiastext.str(), cv::Point(485,15),
                     cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
 
     std::stringstream accbiastext;
     accbiastext << "accbias = [" << speedAndBiases[6] << ", " << speedAndBiases[7] << ", " << speedAndBiases[8] << "]";
-    cv::putText(_image, accbiastext.str(), cv::Point(15,95),
+    cv::putText(_image, accbiastext.str(), cv::Point(485,35),
                     cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
 
     if(gotinitID>=0)
     {
         std::stringstream postext;
         postext << "Init position at gotinitID=" << gotinitID << " [" << _path[gotinitID].x << ", " << _path[gotinitID].y << ", " << initZ << "]";
-        cv::putText(_image, postext.str(), cv::Point(15,115),
+        cv::putText(_image, postext.str(), cv::Point(485,55),
                     cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
     }
 
@@ -903,6 +918,12 @@ double initZ=0;
     cv::imshow("Top View", _image);
     showing_ = false;
     cv::waitKey(1);
+  }
+
+  cv::Point2d convertToMeters(const cv::Point2d & pointInImgCoord) const
+  {
+    cv::Point2d pt = cv::Point2d(pointInImgCoord.x, imageSize - pointInImgCoord.y);
+    return (pt*(1/_scale))+cv::Point2d(_min_x, _min_y);
   }
 
  private:
@@ -963,6 +984,19 @@ double initZ=0;
   }
 
 };
+
+void mouse_callback(int  event, int  x, int  y, int  flag, void *param)
+{
+    PoseViewer *pv = (PoseViewer*)param;
+    if (event == EVENT_MOUSEMOVE)
+    {
+        mousept = pv->convertToMeters(cv::Point2d(x, y));
+//        std::stringstream postext;
+//        postext << "mouse position = [" << pt.x << ", " << pt.y << "]";
+//        cv::putText(pv->_image, postext.str(), cv::Point(15,75),
+//                    cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
+    }
+}
 
 //used to tune focal length of camera
 int main3(int argc, char **argv)
@@ -1356,6 +1390,7 @@ int main(int argc, char **argv)
   okvis::ThreadedKFVio okvis_estimator(parameters);
 
   PoseViewer poseViewer;
+  cv::setMouseCallback("Top View", mouse_callback, &poseViewer);
 
   //set a function to be called every time a new state is estimated
   //std::bind(member_function, member_instance, ...)
