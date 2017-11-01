@@ -329,6 +329,10 @@ if(BUILD_APPS)
   include_directories("/usr/include/flycapture")
   include_directories(okvis_apps/include)
 
+  find_package(OpenGL REQUIRED)
+  find_package(GLUT REQUIRED)
+  include_directories( ${OPENGL_INCLUDE_DIRS}  ${GLUT_INCLUDE_DIRS} )
+
   target_link_libraries(okvis_app_synchronous 
     okvis_util
     okvis_kinematics
@@ -343,6 +347,8 @@ if(BUILD_APPS)
     pthread 
     ${Boost_LIBRARIES}
     flycapture${D} ${FC2_DEPS}
+    ${OPENGL_LIBRARIES}
+    ${GLUT_LIBRARY}
   )
   if(${VISENSORDRIVER_FOUND})
     target_link_libraries(okvis_app_synchronous ${VISensorDriver_LIBRARY})

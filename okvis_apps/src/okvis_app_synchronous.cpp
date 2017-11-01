@@ -10,6 +10,7 @@
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
 #pragma GCC diagnostic ignored "-Woverloaded-virtual"
 #include <opencv2/opencv.hpp>
+#include <GL/gl.h>
 
 #pragma GCC diagnostic pop
 #include <okvis/VioParametersReader.hpp>
@@ -134,7 +135,8 @@ Image imagecopy;
 std::vector<imudata> gIMUframes;
 std::vector<TimeStamp> gImageframes;
 int awayfromlastsynccounter = -1000; // used in ReadIMUData(), but also helps to determine when to turn BothStart to true
-fstream fp ,fp2;
+fstream fp ,fp2, fp3;
+int progress=0;
 double total_length_of_travel=0;
 
 QT_USE_NAMESPACE
@@ -723,9 +725,63 @@ void ReadIMUdata(QSerialPort &serialPort, okvis::ThreadedKFVio &okvis_estimator)
     ManualStop=true;
 }
 
-
-
 cv::Point2d mousept(-9999,-9999);
+okvis::MapPointVector landmarks, landmarks_t;
+std::map<long, Eigen::Vector3d> landmarkmap;
+
+void on_opengl(void* param)
+{
+    glLoadIdentity();
+
+    glPointSize(10);
+    glBegin(GL_POINTS);
+    GLfloat pts[3] = {0, 0, 0};
+
+    //Draw current landmarks as red
+    for ( int i=0; i<landmarks.size(); i++ )
+    {
+        glColor3ub( 255, 0, 0);
+        pts[0] = landmarks[i].point[0]/landmarks[i].point[3];
+        pts[1] = landmarks[i].point[1]/landmarks[i].point[3];
+        pts[2] = landmarks[i].point[2]/landmarks[i].point[3];
+        glVertex3f(pts[0], pts[1], pts[2]);
+        std::cout << pts[0] << ", " << pts[1] << ", " << pts[2] << endl;
+    }
+
+    glEnd();
+    glBegin(GL_POINTS);
+    //Draw old landmarks as green
+    for ( int i=0; i<landmarks_t.size(); i++ )
+    {
+        glColor3ub( 0, 255, 0);
+        pts[0] = landmarks_t[i].point[0]/landmarks_t[i].point[3];
+        pts[1] = landmarks_t[i].point[1]/landmarks_t[i].point[3];
+        pts[2] = landmarks_t[i].point[2]/landmarks_t[i].point[3];
+        glVertex3f(pts[0], pts[1], pts[2]);
+        std::cout << pts[0] << ", " << pts[1] << ", " << pts[2] << endl;
+    }
+
+    glEnd();
+}
+
+void PrintAllLandmarks()
+{
+    if(fp3 && landmarkmap.size()>0)
+    {
+        for (auto lm : landmarkmap)
+        {
+            //filter extreme outlier
+            if(fabs(lm.second[0])<100 && fabs(lm.second[1])<100
+                    && fabs(lm.second[2])<100)
+            {
+                fp3 << lm.second[0] << " " << lm.second[1] << " "
+                     << lm.second[2] << endl;
+            }
+        }
+
+    }
+}
+
 class PoseViewer
 {
  public:
@@ -749,6 +805,7 @@ class PoseViewer
   PoseViewer()
   {
     cv::namedWindow("Top View");
+    //cv::namedWindow("3d-pt-cloud",CV_WINDOW_OPENGL|CV_WINDOW_NORMAL);
     //cv::setMouseCallback("Top View", mouse_callback);
     _image.create(imageSize, imageSize, CV_8UC3);
     drawing_ = false;
@@ -760,21 +817,59 @@ class PoseViewer
 
   const int publishlmfreq = 20;
   int publishlmcounter = 0;
+  //bool printedxyz=false;
   void publishLandmarksAsCallback(const okvis::Time &t,
                             const okvis::MapPointVector &landmark_vector,
                             const okvis::MapPointVector &transferred_lm_vector) // marginalized landmarks
   {
       if(publishlmcounter%publishlmfreq==0)
       {
+//          if(progress>=95 && !printedxyz)
+//          {
+//              for (auto lm : landmark_vector)
+//              {
+//                  //filter extreme outlier
+//                  if(fabs(lm.point[0]/lm.point[3])<100 && fabs(lm.point[1]/lm.point[3])<100
+//                          && fabs(lm.point[2]/lm.point[3])<100)
+//                  {
+//                      fp3 << lm.point[0]/lm.point[3] << " " << lm.point[1]/lm.point[3] << " "
+//                           << lm.point[2]/lm.point[3] << endl;
+//                  }
+
+//              }
+//              for (auto lm : transferred_lm_vector)
+//              {
+//                  //filter extreme outlier
+//                  if(fabs(lm.point[0]/lm.point[3])<100 && fabs(lm.point[1]/lm.point[3])<100
+//                          && fabs(lm.point[2]/lm.point[3])<100)
+//                  {
+//                      fp3 << lm.point[0]/lm.point[3] << " " << lm.point[1]/lm.point[3] << " "
+//                           << lm.point[2]/lm.point[3] << endl;
+//                  }
+//              }
+//              printedxyz=true;
+//          }
+
           for (auto lm : landmark_vector)
           {
               fp2 << lm.id << ", " << lm.point[0]/lm.point[3] << ", " << lm.point[1]/lm.point[3] << ", " <<
                      lm.point[2]/lm.point[3] << ", " << lm.point[3] << ", "  << lm.quality <<
                                                 ", " << lm.distance << ", " << lm.observations.size() << endl;
+              landmarkmap[lm.id] = Eigen::Vector3d(lm.point[0]/lm.point[3], lm.point[1]/lm.point[3], lm.point[2]/lm.point[3]);
           }
           fp2 << endl;
+
+
       }
       publishlmcounter++;
+
+//      landmarks.clear();
+//      landmarks.insert(landmarks.begin(), landmark_vector.begin(), landmark_vector.end());
+
+//      landmarks_t.clear();
+//      landmarks_t.insert(landmarks_t.begin(), transferred_lm_vector.begin(), transferred_lm_vector.end());
+
+      //cv::updateWindow("3d-pt-cloud");
   }
 
 long gotinitID=-1;
@@ -805,6 +900,13 @@ double initZ=0;
     {
         gotinitID = _path.size()-1;
         initZ=r[2];
+    }
+
+    //also print the running path to landmark.xyz for visualization
+    if(IsInitialized && fp3 && _path.size()%4==0)
+    {
+        fp3 << r[0] << " " << r[1] << " "
+             << r[2] << endl;
     }
 
 
@@ -1391,6 +1493,8 @@ int main(int argc, char **argv)
 
   PoseViewer poseViewer;
   cv::setMouseCallback("Top View", mouse_callback, &poseViewer);
+  //cv::setOpenGlDrawCallback("3d-pt-cloud",on_opengl,0);
+  //cout << cv::getBuildInformation() << endl;
 
   //set a function to be called every time a new state is estimated
   //std::bind(member_function, member_instance, ...)
@@ -1400,7 +1504,7 @@ int main(int argc, char **argv)
   timespec starttime;
   //clock_gettime(CLOCK_REALTIME, &starttime);
   timespec_get(&starttime, TIME_UTC);
-  std::stringstream filename;
+  std::stringstream filename, filename2, filename3;
   filename << starttime.tv_sec << "result.txt";
   fp.open(filename.str(), ios::out);
   if(!fp){
@@ -1419,9 +1523,16 @@ int main(int argc, char **argv)
   //So the function returned still have 4 variables
 
 
-  filename << starttime.tv_sec << "result_landmark.txt";
-  fp2.open(filename.str(), ios::out);
+  filename2 << starttime.tv_sec << "result_landmark.txt";
+  fp2.open(filename2.str(), ios::out);
   if(!fp2){
+      cout<<"Fail to open file: "<<endl;
+      std::cin.get();
+  }
+
+  filename3 << starttime.tv_sec << "result_all_landmark.xyz";
+  fp3.open(filename3.str(), ios::out);
+  if(!fp3){
       cout<<"Fail to open file: "<<endl;
       std::cin.get();
   }
@@ -1526,6 +1637,7 @@ int main(int argc, char **argv)
             fp.close();fp2.close();
             std::cout << "total_length_of_travel: " << total_length_of_travel << endl;
             std::cout << std::endl << "Finished. Press any key to exit." << std::endl << std::flush;
+            PrintAllLandmarks();
             cv::waitKey(0);
             return 0;
           }
@@ -1561,6 +1673,7 @@ int main(int argc, char **argv)
               fp.close(); fp2.close();
               std::cout << "total_length_of_travel: " << total_length_of_travel << endl;
               std::cout << std::endl << "Finished. Press any key to exit." << std::endl << std::flush;
+              PrintAllLandmarks();
               cv::waitKey(0);
               return 0;
             }
@@ -1609,8 +1722,9 @@ int main(int argc, char **argv)
         // display progress
         if (counter % 20 == 0)
         {
+          progress=int(double(counter) / double(num_camera_images) * 100);
           std::cout << "\rProgress: "
-              << int(double(counter) / double(num_camera_images) * 100) << "%  "
+              << progress << "%  "
               << std::flush;
         }
 
