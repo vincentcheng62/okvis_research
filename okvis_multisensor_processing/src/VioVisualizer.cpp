@@ -97,6 +97,17 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
   cv::cvtColor(frame->image(image_number), current, CV_GRAY2BGR);
   cv::cvtColor(keyframe->image(image_number), actKeyframe, CV_GRAY2BGR);
 
+  //Print the frame number
+  std::stringstream currentframetext;
+  currentframetext << "frame ID = " << frame->id() << ", " << (float)frame->id()/500 << "sec ";
+  cv::putText(current, currentframetext.str(), cv::Point(15,15),
+              cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,0,255), 1);
+
+  std::stringstream keyframetext;
+  keyframetext << "Key frame ID = " << keyframe->id();
+  cv::putText(actKeyframe, keyframetext.str(), cv::Point(15,15),
+              cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,0,255), 1);
+
   // the keyframe trafo
   Eigen::Vector2d keypoint;
   Eigen::Vector4d landmark;

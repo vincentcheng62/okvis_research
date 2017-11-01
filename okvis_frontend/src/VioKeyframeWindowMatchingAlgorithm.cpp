@@ -519,6 +519,17 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
       return;
     }
 
+    //Use domain knowledge of the ceiling approx height to kill wrong hP
+    double minheight = 1.8;
+    double maxheight = 2.7;
+    Eigen::Vector4d hPP = T_WCa_ * hP_Ca;
+    if(frameB_->id() > 3000 &&
+            (hPP[2]/hPP[3] < minheight || hPP[2]/hPP[3] > maxheight))
+    {
+        //LOG(INFO) << "hPP violate domain knowledge: " << (T_WCa_ * hP_Ca).transpose();
+        return;
+    }
+
     // get the uncertainty
     if (canBeInitialized)
     {

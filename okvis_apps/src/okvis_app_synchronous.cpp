@@ -903,7 +903,7 @@ double initZ=0;
     }
 
     //also print the running path to landmark.xyz for visualization
-    if(IsInitialized && fp3 && _path.size()%4==0)
+    if(IsInitialized && fp3 && _path.size()%4 ==0)
     {
         fp3 << r[0] << " " << r[1] << " "
              << r[2] << endl;
