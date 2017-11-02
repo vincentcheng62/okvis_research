@@ -83,8 +83,8 @@ Frontend::Frontend(size_t numCameras)
       briskMatching_best_second_min_dist_(10),
       matcher_(
           std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(1, 8, true))), // default 4: 4 matcher threads, 4 num of best, dont use distance ratio
-      keyframeInsertionOverlapThreshold_(0.9), // default 0.6, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
-      keyframeInsertionMatchingRatioThreshold_(0.5),//default 0.2, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
+      keyframeInsertionOverlapThreshold_(0.8), // default 0.6, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
+      keyframeInsertionMatchingRatioThreshold_(0.4),//default 0.2, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
       rotation_only_ratio_(0.9), // default is 0.8, make it larger so easier to initialize
       ransacinlinersminnumber_(10), // default is 10
       ransacthreshold_(2), //default is 9, is the reprojection error in pixels?
@@ -373,7 +373,7 @@ bool Frontend::doWeNeedANewKeyframe(
 
   if (!isInitialized_)
   {
-      LOG(INFO) << "Still not initialized!" ;
+      LOG(INFO) << "Still not initialized, dont add keyframe!" ;
         return false;
   }
 

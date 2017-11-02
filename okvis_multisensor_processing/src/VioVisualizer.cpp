@@ -108,6 +108,12 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
   cv::putText(actKeyframe, keyframetext.str(), cv::Point(15,15),
               cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,0,255), 1);
 
+  std::stringstream framedifftext;
+  framedifftext << "frame diff = " << frame->id()-keyframe->id();
+  cv::putText(actKeyframe, framedifftext.str(), cv::Point(15,35),
+              cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,0,255), 1);
+
+
   // the keyframe trafo
   Eigen::Vector2d keypoint;
   Eigen::Vector4d landmark;

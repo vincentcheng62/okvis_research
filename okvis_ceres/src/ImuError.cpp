@@ -669,9 +669,12 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
     //If ImuTrustFactor too high, imu integration drifting will dominant
     // Initially, imu is more important as
     // (1) Triangulation not yet stable, still need to travel more distance to attain required angle
-    // (2) Imu determine the scale of ransac
+    // (2) Imu determine the rough scale of ransac
     // (3) Imu drifting is less severe at the beginning
-    const double ImuTrustFactor = 0.8;
+    // If image has excellent quality (i.e. many robust keypt, almost constant depth, almost no miss match)
+    // ImuTrustFactor can be 0.8
+    // ImuTrustFactor >= 1.4 will cause shaking and lost track
+    const double ImuTrustFactor = 1;
     if(FrameId_ > 6000)
     {
         weighted_error *= ImuTrustFactor;

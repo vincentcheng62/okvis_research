@@ -76,6 +76,17 @@ Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1, // center of A in A c
 
   // stolen and adapted from the Kneip toolchain geometric_vision/include/geometric_vision/triangulation/impl/triangulation.hpp
   Eigen::Vector3d t12 = p2 - p1;
+  Eigen::Vector3d t12_unit = t12/t12.norm();
+
+  //Constraint the angle so that vertical wall features at low altitude should be ignored
+//  const double angle_constraint = 0.3826; // cos(67.5) = cos(112.5) =  0.3826
+//  if(fabs(t12_unit.dot(e1)) > angle_constraint || fabs(t12_unit.dot(e2)) > angle_constraint )
+//  {
+//      isValid = false;
+//      LOG(INFO) << "t12_unit.dot(e1): " << fabs(t12_unit.dot(e1));
+//      return (Eigen::Vector4d((e1[0] + e2[0]) / 2.0, (e1[1] + e2[1]) / 2.0,
+//                              (e1[2] + e2[2]) / 2.0, (1/initialdepthguess)).normalized());
+//  }
 
   // check parallel
   /*if (t12.dot(e1) - t12.dot(e2) < 1.0e-12) {

@@ -784,6 +784,9 @@ void PrintAllLandmarks()
 
 long gotinitID=-1;
 double initZ=0;
+double median_lm_height=0;
+double lmm_max=-999, lmm_min=999, lmm_avg=0, lmm_median=0; // landmarks median statistics
+std::vector<double> lmm;
 class PoseViewer
 {
  public:
@@ -864,6 +867,28 @@ class PoseViewer
 
       }
       publishlmcounter++;
+
+      if(landmark_vector.size()>5)
+      {
+          std::vector<double> heights;
+          for (auto lm : landmark_vector)
+          {
+              heights.push_back(lm.point[2]/lm.point[3]);
+          }
+          size_t n = heights.size() / 2;
+          std::nth_element(heights.begin(), heights.begin()+n, heights.end());
+          median_lm_height = heights[n];
+
+          if(median_lm_height > lmm_max) lmm_max = median_lm_height;
+          if(median_lm_height < lmm_min) lmm_min = median_lm_height;
+          lmm_avg = (lmm_avg*(publishlmcounter-1) + median_lm_height)/publishlmcounter;
+          lmm.push_back(median_lm_height);
+
+          n = lmm.size() / 2;
+          std::nth_element(lmm.begin(), lmm.begin()+n, lmm.end());
+          lmm_median = lmm[n];
+      }
+
 
 //      landmarks.clear();
 //      landmarks.insert(landmarks.begin(), landmark_vector.begin(), landmark_vector.end());
@@ -999,6 +1024,16 @@ class PoseViewer
         std::stringstream postext;
         postext << "Init position at gotinitID=" << gotinitID << " [" << _path[gotinitID].x << ", " << _path[gotinitID].y << ", " << initZ << "]";
         cv::putText(_image, postext.str(), cv::Point(485,55),
+                    cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
+
+        std::stringstream lmtext;
+        lmtext << "Median landmarks height=" << median_lm_height ;
+        cv::putText(_image, lmtext.str(), cv::Point(485,75),
+                    cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
+
+        std::stringstream lmmtext;
+        lmmtext << "max=" << lmm_max << ", min=" << lmm_min << ", avg=" << lmm_avg << ", median=" << lmm_median ;
+        cv::putText(_image, lmmtext.str(), cv::Point(485,95),
                     cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
     }
 

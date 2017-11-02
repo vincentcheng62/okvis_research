@@ -496,6 +496,10 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
   uint64_t lmIdA = frameA_->landmarkId(camIdA_, indexA);
   uint64_t lmIdB = frameB_->landmarkId(camIdB_, indexB);
 
+  //Use domain knowledge of the ceiling approx height to kill wrong hP
+  const double minheight = 1.8;
+  const double maxheight = 2.7;
+
   if (matchingType_ == Match2D2D)
   {
 
@@ -527,16 +531,13 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
       return;
     }
 
-    //Use domain knowledge of the ceiling approx height to kill wrong hP
-//    double minheight = 1.8;
-//    double maxheight = 2.7;
-//    Eigen::Vector4d hPP = T_WCa_ * hP_Ca;
-//    if(frameB_->id() > 5000 && // since height measurement at the beginning is not so accurate
-//            (hPP[2]/hPP[3] < minheight || hPP[2]/hPP[3] > maxheight))
-//    {
-//        //LOG(INFO) << "hPP violate domain knowledge: " << (T_WCa_ * hP_Ca).transpose();
-//        return;
-//    }
+    Eigen::Vector4d hPP = T_WCa_ * hP_Ca;
+    if(frameB_->id() > 6000 && // since height measurement at the beginning is not so accurate
+            (hPP[2]/hPP[3] < minheight || hPP[2]/hPP[3] > maxheight))
+    {
+        //LOG(INFO) << "hPP violate domain knowledge: " << (T_WCa_ * hP_Ca).transpose();
+        canBeInitialized=false;
+    }
 
     // get the uncertainty
     if (canBeInitialized)
@@ -653,6 +654,18 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
   //Only add observation for frameB only, not setLandMark
   else
   {
+    okvis::MapPoint landmark;
+    estimator_->getLandmark(lmIdA, landmark);
+
+    //dont add observation for those landmarks
+    if(frameB_->id() > 6000 && // since height measurement at the beginning is not so accurate
+            (landmark.point[2]/landmark.point[3] < minheight ||
+             landmark.point[2]/landmark.point[3] > maxheight))
+    {
+        //LOG(INFO) << "hPP violate domain knowledge: " << (T_WCa_ * hP_Ca).transpose();
+        return;
+    }
+
     OKVIS_ASSERT_TRUE_DBG(Exception,lmIdB==0,"bug. Id in frame B already set.");
 
     // get projection into B, the current frame
@@ -685,8 +698,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
 
     frameB_->setLandmarkId(camIdB_, indexB, lmIdA);
     lmIdB = lmIdA;
-    okvis::MapPoint landmark;
-    estimator_->getLandmark(lmIdA, landmark);
+
 
     // initialize in graph
     if (landmark.observations.find(

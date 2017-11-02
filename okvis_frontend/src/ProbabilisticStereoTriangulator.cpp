@@ -207,6 +207,14 @@ bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::stereoTriangulate(
       Eigen::Vector3d(0, 0, 0),  // center of A in A coordinates (0,0,0)
       backProjectionDirectionA_inA.normalized(), T_AB_.r(),  // center of B in A coordinates
       backProjectionDirectionB_inA.normalized(), sigmaR, isValid, isParallel);
+
+  //If landmarks so close to camera, ignore it
+  if(frameB_->id() > 6000 && hpA[2]/hpA[3] < 1.2)
+  {
+      //LOG(INFO) << "hpA[2]/hpA[3]=" << hpA[2]/hpA[3] << ", so close to camera, ignore it!";
+      isValid = false;
+  }
+
   outCanBeInitializedInaccuarate = !isParallel;
 
   if (!isValid) {
