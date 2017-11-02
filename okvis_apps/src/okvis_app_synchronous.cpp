@@ -782,6 +782,8 @@ void PrintAllLandmarks()
     }
 }
 
+long gotinitID=-1;
+double initZ=0;
 class PoseViewer
 {
  public:
@@ -872,8 +874,7 @@ class PoseViewer
       //cv::updateWindow("3d-pt-cloud");
   }
 
-long gotinitID=-1;
-double initZ=0;
+
   // this we can register as a callback, so will run whether a new state is estimated
   void publishFullStateAsCallback(
       const okvis::Time &t,
@@ -1628,7 +1629,8 @@ int main(int argc, char **argv)
       while (true)
       {
         okvis_estimator.display(); // show all OKVIS's camera
-        cv::waitKey(PLAY_DELAY_IN_MS);
+        if(gotinitID>=0) cv::waitKey(PLAY_DELAY_IN_MS);
+        else cv::waitKey(10);
         poseViewer.display();
 
         // check if at the end

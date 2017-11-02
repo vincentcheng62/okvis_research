@@ -215,12 +215,12 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
         //print some at bottom and some at top image to avoid display too overlap
         if(it->landmarkId%2==0)
         {
-            cv::putText(actKeyframe, heighttext.str(), cv::Point2f(keyframePt[0]+15, keyframePt[1]-15),
+            cv::putText(actKeyframe, heighttext.str(), cv::Point2f(keyframePt[0]+20, keyframePt[1]-20),
                             cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,255,0), 1);
         }
         else
         {
-            cv::putText(outimg, heighttext.str(), cv::Point2f(keypoint[0]+15, keypoint[1]+15 + rowJump),
+            cv::putText(outimg, heighttext.str(), cv::Point2f(keypoint[0]+20, keypoint[1]+20 + rowJump),
                             cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,255,0), 1);
         }
 

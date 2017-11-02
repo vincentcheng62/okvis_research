@@ -125,14 +125,25 @@ void DenseMatcher::matchBody(
                     second_best_match_distance / best_match_distance > const_distratiothres)
                     && fabs(best_match_distance-second_best_match_distance) > best_second_min)
             {
-              Eigen::Vector2d bestkeypt, secondkeypt, keyframept;
+              Eigen::Vector2d bestkeypt, otherkeypt, keyframept;
+              double otherbestdist=9999;
+
               matchingAlgorithm.getFrameB()->getKeypoint(0, best_matches_list[0].indexA, bestkeypt);
-              matchingAlgorithm.getFrameB()->getKeypoint(0, best_matches_list[1].indexA, secondkeypt);
               matchingAlgorithm.getFrameA()->getKeypoint(0, vpairs[i].indexA, keyframept);
+
+              for(int i=1; i<numBest_; i++)
+              {
+                 if(best_matches_list[i].indexA != -1)
+                 {
+                    matchingAlgorithm.getFrameB()->getKeypoint(0, best_matches_list[i].indexA, otherkeypt);
+                    double dist = (otherkeypt-keyframept).norm();
+                    if(dist < otherbestdist) otherbestdist = dist;
+                 }
+              }
 
               //Assume wrong match due to repeat pattern should have a relatively far distance
               //than the distance travel between 2 frames
-              if((bestkeypt-keyframept).norm() + 10 < (secondkeypt-keyframept).norm())
+              if((bestkeypt-keyframept).norm() + 30 < otherbestdist )
               {
                   matchingAlgorithm.setBestMatch(vpairs[i].indexA, i, vpairs[i].distance);
                   //LOG(INFO) << "best: " << best_match_distance << ", second: " << second_best_match_distance;

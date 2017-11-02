@@ -82,7 +82,7 @@ Frontend::Frontend(size_t numCameras)
       briskMatchingRatioThreshold_(3.0),
       briskMatching_best_second_min_dist_(10),
       matcher_(
-          std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(1, 4, true))), // default 4: 4 matcher threads, 4 num of best, dont use distance ratio
+          std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(1, 8, true))), // default 4: 4 matcher threads, 4 num of best, dont use distance ratio
       keyframeInsertionOverlapThreshold_(0.9), // default 0.6, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
       keyframeInsertionMatchingRatioThreshold_(0.5),//default 0.2, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
       rotation_only_ratio_(0.9), // default is 0.8, make it larger so easier to initialize

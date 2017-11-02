@@ -105,7 +105,7 @@ class ImuError :
   /// \@param[in] t_1 End time.
   ImuError(const okvis::ImuMeasurementDeque & imuMeasurements,
            const okvis::ImuParameters & imuParameters, const okvis::Time& t_0,
-           const okvis::Time& t_1);
+           const okvis::Time& t_1, const uint64_t FrameId );
 
   /**
    * @brief Propagates pose, speeds and biases with given IMU measurements.
@@ -162,6 +162,10 @@ class ImuError :
   /// \@param[in] t_1 End time.
   void setT1(const okvis::Time& t_1) {
     t1_ = t_1;
+  }
+
+  void setFrameID(const uint64_t FrameId) {
+    FrameId_ = FrameId;
   }
 
   // getters
@@ -244,6 +248,7 @@ class ImuError :
   // times
   okvis::Time t0_; ///< The start time (i.e. time of the first set of states).
   okvis::Time t1_; ///< The end time (i.e. time of the sedond set of states).
+  uint64_t FrameId_;
 
   // preintegration stuff. the mutable is a TERRIBLE HACK, but what can I do.
   mutable std::mutex preintegrationMutex_; //< Protect access of intermediate results.

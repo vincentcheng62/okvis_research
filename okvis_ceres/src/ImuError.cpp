@@ -58,11 +58,15 @@ namespace ceres {
 // Construct with measurements and parameters.
 ImuError::ImuError(const okvis::ImuMeasurementDeque & imuMeasurements,
                    const okvis::ImuParameters & imuParameters,
-                   const okvis::Time& t_0, const okvis::Time& t_1) {
+                   const okvis::Time& t_0,
+                   const okvis::Time& t_1,
+                   const uint64_t FrameId)
+{
   setImuMeasurements(imuMeasurements);
   setImuParameters(imuParameters);
   setT0(t_0);
   setT1(t_1);
+  setFrameID(FrameId);
 
   OKVIS_ASSERT_TRUE_DBG(Exception,
                      t_0 >= imuMeasurements.front().timeStamp,
@@ -659,6 +663,19 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
     // error weighting
     Eigen::Map<Eigen::Matrix<double, 15, 1> > weighted_error(residuals);
     weighted_error = squareRootInformation_ * error;
+
+    //Tune the imu error weighting, so can trust imu more/less
+    //If ImuTrustFactor too low, the whole system become almost monocular and will scale very bad
+    //If ImuTrustFactor too high, imu integration drifting will dominant
+    // Initially, imu is more important as
+    // (1) Triangulation not yet stable, still need to travel more distance to attain required angle
+    // (2) Imu determine the scale of ransac
+    // (3) Imu drifting is less severe at the beginning
+    const double ImuTrustFactor = 0.8;
+    if(FrameId_ > 6000)
+    {
+        weighted_error *= ImuTrustFactor;
+    }
 
     // get the Jacobians
     if (jacobians != NULL)

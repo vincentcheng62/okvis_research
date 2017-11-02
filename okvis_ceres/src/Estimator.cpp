@@ -333,7 +333,7 @@ bool Estimator::addStates(
                   //Non linear ImuError, 15 residuals
           new ceres::ImuError(imuMeasurements, imuParametersVec_.at(i),
                               lastElementIterator->second.timestamp,
-                              states.timestamp));
+                              states.timestamp, multiFrame->id()));
       /*::ceres::ResidualBlockId id = */mapPtr_->addResidualBlock(
           imuError, // cost function
           NULL, // lost function
