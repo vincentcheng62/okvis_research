@@ -520,12 +520,6 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
   speedAndBiases.head<3>() += C_WS_0*(acc_integral/*-C_integral*speedAndBiases.segment<3>(6)*/)
                                 -g_W*Delta_t; // accumulated velocity decrement during the whole propagation period
 
-  //Domain knowledge constraint, z-axis has no movement, so set z-depth and z-velocity=0
-//  Eigen::Vector3d temp_r = T_WS.r();
-//  temp_r[2]=0;
-//  T_WS.set(temp_r,T_WS.q());
-//  speedAndBiases[2] =0.0;
-
   // assign Jacobian, if requested
   if (jacobian)
   {

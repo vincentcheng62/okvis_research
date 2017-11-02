@@ -49,6 +49,7 @@
 
 #include <okvis/assert_macros.hpp>
 #include "ThreadPool.hpp"
+#include <Eigen/Dense>
 
 /// \brief okvis Main namespace of this package.
 namespace okvis {

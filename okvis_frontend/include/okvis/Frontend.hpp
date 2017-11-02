@@ -262,6 +262,12 @@ class Frontend : public VioFrontendInterface {
     initialiseBriskFeatureDetectors();
   }
 
+  void setBriskMatchingbest_second_min_dist(double dist)
+  {
+    briskMatching_best_second_min_dist_ = dist;
+    initialiseBriskFeatureDetectors();
+  }
+
   /// @brief Set the area overlap threshold under which a new keyframe is inserted.
   void setKeyframeInsertionOverlapThreshold(float threshold) {
     keyframeInsertionOverlapThreshold_ = threshold;
@@ -325,6 +331,7 @@ class Frontend : public VioFrontendInterface {
 
   double briskMatchingThreshold_; ///< The set BRISK matching threshold.
   double briskMatchingRatioThreshold_;///< The set BRISK matching ratio threshold.
+  double briskMatching_best_second_min_dist_;
   bool IsOriginalFeatureDetector_; ///<is using cv::Fast or sse Harris corner detector (the original)?
 
   ///@}

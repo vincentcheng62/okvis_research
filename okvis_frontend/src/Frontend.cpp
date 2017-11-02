@@ -80,6 +80,7 @@ Frontend::Frontend(size_t numCameras)
       briskDescriptionPatternScale_(1.0),
       briskMatchingThreshold_(60.0), // default 60.0
       briskMatchingRatioThreshold_(3.0),
+      briskMatching_best_second_min_dist_(10),
       matcher_(
           std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(1, 4, true))), // default 4: 4 matcher threads, 4 num of best, dont use distance ratio
       keyframeInsertionOverlapThreshold_(0.9), // default 0.6, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
@@ -243,7 +244,7 @@ bool Frontend::dataAssociationAndInitialization(
     }
 
     //num3dMatches is the total number of match for 3D-2D with past 3 keyframes and 2D-2D with past 2 keyframes
-    if (num3dMatches <= required3d2dmatches_) {
+    if (isInitialized_ && num3dMatches <= required3d2dmatches_) {
       LOG(WARNING) << "Tracking failure. Number of 3d2d-matches: " << num3dMatches << " <= " << required3d2dmatches_;
     }
 
@@ -501,6 +502,7 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
                                            MATCHING_ALGORITHM::Match3D2D,
                                            briskMatchingThreshold_,
                                            briskMatchingRatioThreshold_,
+                                           briskMatching_best_second_min_dist_,
                                            usePoseUncertainty);
       matchingAlgorithm.setFrames(olderFrameId, currentFrameId, im, im);
 
@@ -532,6 +534,7 @@ int Frontend::matchToKeyframes(okvis::Estimator& estimator,
                                            MATCHING_ALGORITHM::Match2D2D,
                                            briskMatchingThreshold_,
                                            briskMatchingRatioThreshold_,
+                                           briskMatching_best_second_min_dist_,
                                            usePoseUncertainty);
       matchingAlgorithm.setFrames(olderFrameId, currentFrameId, im, im);
 
@@ -612,6 +615,7 @@ int Frontend::matchToLastFrame(okvis::Estimator& estimator,
                                          MATCHING_ALGORITHM::Match3D2D,
                                          briskMatchingThreshold_,
                                          briskMatchingRatioThreshold_,
+                                         briskMatching_best_second_min_dist_,
                                          usePoseUncertainty);
     matchingAlgorithm.setFrames(lastFrameId, currentFrameId, im, im);
 
@@ -630,6 +634,7 @@ int Frontend::matchToLastFrame(okvis::Estimator& estimator,
                                          MATCHING_ALGORITHM::Match2D2D,
                                          briskMatchingThreshold_,
                                          briskMatchingRatioThreshold_,
+                                         briskMatching_best_second_min_dist_,
                                          usePoseUncertainty);
     matchingAlgorithm.setFrames(lastFrameId, currentFrameId, im, im);
 
@@ -676,6 +681,7 @@ void Frontend::matchStereo(okvis::Estimator& estimator,
                                            MATCHING_ALGORITHM::Match2D2D,
                                            briskMatchingThreshold_,
                                            briskMatchingRatioThreshold_,
+                                           briskMatching_best_second_min_dist_,
                                            false);  // TODO: make sure this is changed when switching back to uncertainty based matching
       matchingAlgorithm.setFrames(mfId, mfId, im0, im1);  // newest frame
 

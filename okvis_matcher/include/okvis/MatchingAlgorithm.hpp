@@ -48,6 +48,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <okvis/MultiFrame.hpp>
 
 /// \brief okvis Main namespace of this package.
 namespace okvis {
@@ -105,6 +106,8 @@ class MatchingAlgorithm {
     return 0;
   }
 
+  virtual float best_second_min_dist() const { return 0;}
+
   /// \brief Should we skip the item in list A? This will be called once for each item in the list
   virtual bool skipA(size_t /* indexA */) const {
     return false;
@@ -114,6 +117,9 @@ class MatchingAlgorithm {
   virtual bool skipB(size_t /* indexB */) const {
     return false;
   }
+
+  virtual std::shared_ptr<okvis::MultiFrame> getFrameA() = 0;
+  virtual std::shared_ptr<okvis::MultiFrame> getFrameB() = 0;
 
   /// \brief The "distance" between the two points.
   ///        For points that absolutely don't match. Please use float max.

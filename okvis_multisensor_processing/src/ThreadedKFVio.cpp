@@ -101,6 +101,7 @@ void ThreadedKFVio::init()
   frontend_.setBriskDetectionThreshold(parameters_.optimization.detectionThreshold);
   frontend_.setBriskMatchingThreshold(parameters_.optimization.detectionMatchingThreshold);
   frontend_.setBriskMatchingRatioThreshold(parameters_.optimization.detectionMatchingRatioThreshold);
+  frontend_.setBriskMatchingbest_second_min_dist(parameters_.optimization.detectionMatching_best_second_min_dist);
   frontend_.setBriskDetectionMaximumKeypoints(parameters_.optimization.maxNoKeypoints);
   frontend_.setIsOriginalFeatureDetector(parameters_.optimization.IsOriginalFeatureDetector);
   frontend_.setRotation_only_ratio_(parameters_.optimization.rotationOnlyThreshold);

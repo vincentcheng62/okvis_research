@@ -101,6 +101,7 @@ void DenseMatcher::matchBody(
   // assemble the pairs and return
   const distance_t& const_distratiothres = matchingAlgorithm.distanceRatioThreshold();
   const distance_t& const_distthres = matchingAlgorithm.distanceThreshold();
+  const distance_t& best_second_min = matchingAlgorithm.best_second_min_dist();
 
   std::set<uint64_t> myset;
   // i is the indexB
@@ -120,15 +121,28 @@ void DenseMatcher::matchBody(
             const distance_t& second_best_match_distance = best_matches_list[1].distance;
 
             // Only assign if the distance ratio better than the threshold.
-            if (best_match_distance == 0 ||
+            if ((best_match_distance == 0 ||
                     second_best_match_distance / best_match_distance > const_distratiothres)
+                    && fabs(best_match_distance-second_best_match_distance) > best_second_min)
             {
-              matchingAlgorithm.setBestMatch(vpairs[i].indexA, i, vpairs[i].distance);
-//              if(myset.find(vpairs[i].indexA)!=myset.end())
-//              {
-//                 LOG(INFO) << "vpairs[i].indexA got repeated!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
-//              }
-//              myset.insert(vpairs[i].indexA);
+              Eigen::Vector2d bestkeypt, secondkeypt, keyframept;
+              matchingAlgorithm.getFrameB()->getKeypoint(0, best_matches_list[0].indexA, bestkeypt);
+              matchingAlgorithm.getFrameB()->getKeypoint(0, best_matches_list[1].indexA, secondkeypt);
+              matchingAlgorithm.getFrameA()->getKeypoint(0, vpairs[i].indexA, keyframept);
+
+              //Assume wrong match due to repeat pattern should have a relatively far distance
+              //than the distance travel between 2 frames
+              if((bestkeypt-keyframept).norm() + 10 < (secondkeypt-keyframept).norm())
+              {
+                  matchingAlgorithm.setBestMatch(vpairs[i].indexA, i, vpairs[i].distance);
+                  //LOG(INFO) << "best: " << best_match_distance << ", second: " << second_best_match_distance;
+    //              if(myset.find(vpairs[i].indexA)!=myset.end())
+    //              {
+    //                 LOG(INFO) << "vpairs[i].indexA got repeated!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
+    //              }
+    //              myset.insert(vpairs[i].indexA);
+              }
+
             }
           }
 

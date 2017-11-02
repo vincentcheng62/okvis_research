@@ -59,12 +59,14 @@ namespace okvis
 // Constructor.
 template<class CAMERA_GEOMETRY_T>
 VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::VioKeyframeWindowMatchingAlgorithm(
-    okvis::Estimator& estimator, int matchingType, float distanceThreshold, float distanceRatioThreshold,
+    okvis::Estimator& estimator, int matchingType, float distanceThreshold,
+    float distanceRatioThreshold, float best_second_min_dist,
     bool usePoseUncertainty)
 {
   matchingType_ = matchingType;
   distanceThreshold_ = distanceThreshold;
   distanceRatioThreshold_ = distanceRatioThreshold;
+  best_second_min_dist_ = best_second_min_dist;
   estimator_ = &estimator;
   usePoseUncertainty_ = usePoseUncertainty;
 }
@@ -413,6 +415,12 @@ float VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::distanceRatioThresh
   return distanceRatioThreshold_;
 }
 
+// Get the distance ratio threshold for which matches exceeding it will not be returned as matches.
+template<class CAMERA_GEOMETRY_T>
+float VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::best_second_min_dist() const {
+  return best_second_min_dist_;
+}
+
 // Geometric verification of a match.
 template<class CAMERA_GEOMETRY_T>
 bool VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::verifyMatch(
@@ -520,15 +528,15 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
     }
 
     //Use domain knowledge of the ceiling approx height to kill wrong hP
-    double minheight = 1.8;
-    double maxheight = 2.7;
-    Eigen::Vector4d hPP = T_WCa_ * hP_Ca;
-    if(frameB_->id() > 3000 &&
-            (hPP[2]/hPP[3] < minheight || hPP[2]/hPP[3] > maxheight))
-    {
-        //LOG(INFO) << "hPP violate domain knowledge: " << (T_WCa_ * hP_Ca).transpose();
-        return;
-    }
+//    double minheight = 1.8;
+//    double maxheight = 2.7;
+//    Eigen::Vector4d hPP = T_WCa_ * hP_Ca;
+//    if(frameB_->id() > 5000 && // since height measurement at the beginning is not so accurate
+//            (hPP[2]/hPP[3] < minheight || hPP[2]/hPP[3] > maxheight))
+//    {
+//        //LOG(INFO) << "hPP violate domain knowledge: " << (T_WCa_ * hP_Ca).transpose();
+//        return;
+//    }
 
     // get the uncertainty
     if (canBeInitialized)
@@ -664,8 +672,8 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
 
     const double chi2 = err.transpose().eval() * U_tot.inverse() * err;
 
-    if (chi2 > 4.0) {
-        LOG(INFO) << "In 3d-2d setBestMatch, chi2=" << chi2 << " >4.0, cannot set landmark in current frame";
+    if (chi2 > 1.0) { // default is 4.0, set it tighter to reduce green landmark miss-match problem in close area
+        LOG(INFO) << "In 3d-2d setBestMatch, chi2=" << chi2 << " >2.0, cannot set landmark in current frame";
       return;
     }
 

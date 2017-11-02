@@ -79,7 +79,8 @@ class VioKeyframeWindowMatchingAlgorithm : public okvis::MatchingAlgorithm {
    * @param usePoseUncertainty  Use the pose uncertainty for matching.
    */
   VioKeyframeWindowMatchingAlgorithm(okvis::Estimator& estimator,
-                                     int matchingType, float distanceThreshold, float distanceRatioThreshold,
+                                     int matchingType, float distanceThreshold,
+                                     float distanceRatioThreshold, float best_second_min_dist,
                                      bool usePoseUncertainty = true);
 
   virtual ~VioKeyframeWindowMatchingAlgorithm();
@@ -110,6 +111,7 @@ class VioKeyframeWindowMatchingAlgorithm : public okvis::MatchingAlgorithm {
   /// \brief Get the distance threshold for which matches exceeding it will not be returned as matches.
   virtual float distanceThreshold() const;
   virtual float distanceRatioThreshold() const;
+  virtual float best_second_min_dist() const;
   /// \brief Set the distance threshold for which matches exceeding it will not be returned as matches.
   void setDistanceThreshold(float distanceThreshold);
 
@@ -169,6 +171,16 @@ class VioKeyframeWindowMatchingAlgorithm : public okvis::MatchingAlgorithm {
     return validRelativeUncertainty_;
   }
 
+  std::shared_ptr<okvis::MultiFrame> getFrameA()
+  {
+      return frameA_;
+  }
+
+  std::shared_ptr<okvis::MultiFrame> getFrameB()
+  {
+      return frameB_;
+  }
+
  private:
   /// \brief This is essentially the map.
   okvis::Estimator* estimator_;
@@ -187,6 +199,7 @@ class VioKeyframeWindowMatchingAlgorithm : public okvis::MatchingAlgorithm {
   /// Distances above this threshold will not be returned as matches.
   float distanceThreshold_;
   float distanceRatioThreshold_;
+  float best_second_min_dist_;
 
   /// \name Store some transformations that are often used
   /// \{

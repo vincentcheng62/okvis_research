@@ -62,7 +62,8 @@ ceres_options:
 detection_options:
     threshold: 8.0      # detection threshold. By default the uniformity radius in pixels
     matching_threshold: 50.0    # the threshold for the hamming distance between 2 descriptors, more strict for lower value, cannot set too low, since there are noise in images, even same physical pt descriptor will not be exactly the same
-    matching_ratio_threshold: 1.5 # the ratio threshold s.t. second/best>threshold will be matched
+    matching_ratio_threshold: 3.0 # the ratio threshold s.t. second/best>threshold will be matched
+    matching_best_second_min_dist: 20.0
     octaves: 3           # number of octaves for detection. 0 means single-scale at highest resolution
     maxNoKeypoints: 120  # restrict to a maximum of this many keypoints per image (strongest ones)
     IsHarris: true        # is using Fast or sse Harris corner detector (the original)
