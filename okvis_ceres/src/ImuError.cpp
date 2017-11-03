@@ -76,7 +76,7 @@ ImuError::ImuError(const okvis::ImuMeasurementDeque & imuMeasurements,
                      "Last IMU measurement included in ImuError is not new enough!");
 }
 
-//Calculate reference (linearisation) point and information matrix
+//Calculate reference (linearisation) point for speedAndBias and information matrix
 int ImuError::redoPreintegration(const okvis::kinematics::Transformation& /*T_WS*/,
                                  const okvis::SpeedAndBias & speedAndBiases) const {
 
@@ -524,6 +524,16 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
   speedAndBiases.head<3>() += C_WS_0*(acc_integral/*-C_integral*speedAndBiases.segment<3>(6)*/)
                                 -g_W*Delta_t; // accumulated velocity decrement during the whole propagation period
 
+  //Domain knowledge constraint, z-axis has no movement, so set z-depth and z-velocity=0
+  //Setting here affect the display and the T_WS used in matching and triangulation
+//    if(multiFrame->id()>6000) // add constraint after initialization is stable
+//    {
+//      Eigen::Vector3d temp_r = T_WS.r();
+//      temp_r[2]=0;
+//      T_WS.set(temp_r,T_WS.q());
+//      speedAndBiases[2] = 0;
+//    }
+
   // assign Jacobian, if requested
   if (jacobian)
   {
@@ -586,13 +596,16 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
     speedAndBiases_1[i] = parameters[3][i];
   }
 
+  //One imu measurement (20 imu frames) link to 4 vertices:
+  //prev and current pose, and prev and current speedAndBias
+
   // this will NOT be changed:
   const Eigen::Matrix3d C_WS_0 = T_WS_0.C();
   const Eigen::Matrix3d C_S0_W = C_WS_0.transpose();
 
   // call the propagation
   const double Delta_t = (t1_ - t0_).toSec();
-  Eigen::Matrix<double, 6, 1> Delta_b;
+  Eigen::Matrix<double, 6, 1> Delta_b; // difference of bias between current and reference
   // ensure unique access
   {
     std::lock_guard<std::mutex> lock(preintegrationMutex_);
@@ -607,7 +620,7 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
   {
     LOG(INFO) << "Redo preintegration since Delta_b.head<3>().norm() * Delta_t=" << Delta_b.head<3>().norm() * Delta_t  << " > 0.0001";
     //Calculate reference (linearisation) point and information matrix
-    redoPreintegration(T_WS_0, speedAndBiases_0);
+    redoPreintegration(T_WS_0, speedAndBiases_0); // set speedAndBiases_0 to reference
     redoCounter_++; // no actual use
     LOG(INFO) << "redoCounter_: " << redoCounter_;
     Delta_b.setZero();
@@ -660,7 +673,12 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
     error.segment<3>(6) = C_S0_W * delta_v_est_W + acc_integral_ + F0.block<3,6>(6,9)*Delta_b;
     error.tail<6>() = speedAndBiases_0.tail<6>() - speedAndBiases_1.tail<6>();
 
+    //Domain knowledge constraint, z-axis has no movement, so set z-depth and z-velocity error=0
+    //error[2] = 0;
+    //error[8] = 0;
+
     // error weighting
+    //Eigen::Map [A matrix or vector expression mapping an existing array of data.]
     Eigen::Map<Eigen::Matrix<double, 15, 1> > weighted_error(residuals);
     weighted_error = squareRootInformation_ * error;
 
@@ -686,7 +704,7 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
       if (jacobians[0] != NULL)
       {
         // Jacobian w.r.t. minimal perturbance
-        Eigen::Matrix<double, 15, 6> J0_minimal = squareRootInformation_
+        Eigen::Matrix<double, 15, 6> J0_minimal = squareRootInformation_ * ImuTrustFactor
             * F0.block<15, 6>(0, 0);
 
         // pseudo inverse of the local parametrization Jacobian:
@@ -699,8 +717,10 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
         J0 = J0_minimal * J_lift;
 
         // if requested, provide minimal Jacobians
-        if (jacobiansMinimal != NULL) {
-          if (jacobiansMinimal[0] != NULL) {
+        if (jacobiansMinimal != NULL)
+        {
+          if (jacobiansMinimal[0] != NULL)
+          {
             Eigen::Map<Eigen::Matrix<double, 15, 6, Eigen::RowMajor> > J0_minimal_mapped(
                 jacobiansMinimal[0]);
             J0_minimal_mapped = J0_minimal;
@@ -713,11 +733,13 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
       {
         Eigen::Map<Eigen::Matrix<double, 15, 9, Eigen::RowMajor> > J1(
             jacobians[1]);
-        J1 = squareRootInformation_ * F0.block<15, 9>(0, 6);
+        J1 = squareRootInformation_ * ImuTrustFactor * F0.block<15, 9>(0, 6);
 
         // if requested, provide minimal Jacobians
-        if (jacobiansMinimal != NULL) {
-          if (jacobiansMinimal[1] != NULL) {
+        if (jacobiansMinimal != NULL)
+        {
+          if (jacobiansMinimal[1] != NULL)
+          {
             Eigen::Map<Eigen::Matrix<double, 15, 9, Eigen::RowMajor> > J1_minimal_mapped(
                 jacobiansMinimal[1]);
             J1_minimal_mapped = J1;
@@ -728,7 +750,7 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
       if (jacobians[2] != NULL)
       {
         // Jacobian w.r.t. minimal perturbance
-        Eigen::Matrix<double, 15, 6> J2_minimal = squareRootInformation_
+        Eigen::Matrix<double, 15, 6> J2_minimal = squareRootInformation_ * ImuTrustFactor
                     * F1.block<15, 6>(0, 0);
 
         // pseudo inverse of the local parametrization Jacobian:
@@ -741,8 +763,10 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
         J2 = J2_minimal * J_lift;
 
         // if requested, provide minimal Jacobians
-        if (jacobiansMinimal != NULL) {
-          if (jacobiansMinimal[2] != NULL) {
+        if (jacobiansMinimal != NULL)
+        {
+          if (jacobiansMinimal[2] != NULL)
+          {
             Eigen::Map<Eigen::Matrix<double, 15, 6, Eigen::RowMajor> > J2_minimal_mapped(
                 jacobiansMinimal[2]);
             J2_minimal_mapped = J2_minimal;
@@ -753,11 +777,13 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
       if (jacobians[3] != NULL)
       {
         Eigen::Map<Eigen::Matrix<double, 15, 9, Eigen::RowMajor> > J3(jacobians[3]);
-        J3 = squareRootInformation_ * F1.block<15, 9>(0, 6);
+        J3 = squareRootInformation_ * ImuTrustFactor * F1.block<15, 9>(0, 6);
 
         // if requested, provide minimal Jacobians
-        if (jacobiansMinimal != NULL) {
-          if (jacobiansMinimal[3] != NULL) {
+        if (jacobiansMinimal != NULL)
+        {
+          if (jacobiansMinimal[3] != NULL)
+          {
             Eigen::Map<Eigen::Matrix<double, 15, 9, Eigen::RowMajor> > J3_minimal_mapped(
                 jacobiansMinimal[3]);
             J3_minimal_mapped = J3;

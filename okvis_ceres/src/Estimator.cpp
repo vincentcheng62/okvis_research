@@ -155,13 +155,13 @@ bool Estimator::addStates(
         statesMap_.rbegin()->second.timestamp, multiFrame->timestamp());
 
     //Domain knowledge constraint, z-axis has no movement, so set z-depth and z-velocity=0
-    if(multiFrame->id()>5000) // add constraint after initialization is stable
-    {
-        //  Eigen::Vector3d temp_r = T_WS.r();
-        //  temp_r[2]=0;
-        //  T_WS.set(temp_r,T_WS.q());
-        //speedAndBias[2] *= 0.1;
-    }
+//    if(multiFrame->id()>6000) // add constraint after initialization is stable
+//    {
+//          Eigen::Vector3d temp_r = T_WS.r();
+//          temp_r[2]=0;
+//          T_WS.set(temp_r,T_WS.q());
+//          speedAndBias[2] = 0;
+//    }
 
 
     LOG(INFO) << numUsedImuMeasurements << " imu measurements are propagated in addStates()";
