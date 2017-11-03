@@ -764,86 +764,86 @@ void Frontend::matchStereo(okvis::Estimator& estimator,
     //1cm difference in T_SC.r() x and y is normal
     //Current camera pose in world: by SolvePnp with current image frame and landmarks with 3d info
     //Current imu pose in world: integration from last imu pose
-    if(isInitialized_ && multiFrame->id() > 6000)
-    {
-        std::vector<cv::Point2f> imagePoints;
-        std::vector<cv::Point3f> objectPoints;
+//    if(isInitialized_ && multiFrame->id() > 6000)
+//    {
+//        std::vector<cv::Point2f> imagePoints;
+//        std::vector<cv::Point3f> objectPoints;
 
-        for (size_t k = 0; k < ksize; ++k)
-        {
-            u_int64_t lmid = multiFrame->landmarkId(im, k);
-            if(lmid!=0) // if keypt k has a corrospoending landmarks
-            {
-                if(estimator.isLandmarkAdded(lmid) && estimator.isLandmarkInitialized(lmid))
-                {
-                    Eigen::Vector2d keypt;
-                    multiFrame->getKeypoint(im, k, keypt);
-                    MapPoint landmark;
-                    estimator.getLandmark(lmid, landmark);
+//        for (size_t k = 0; k < ksize; ++k)
+//        {
+//            u_int64_t lmid = multiFrame->landmarkId(im, k);
+//            if(lmid!=0) // if keypt k has a corrospoending landmarks
+//            {
+//                if(estimator.isLandmarkAdded(lmid) && estimator.isLandmarkInitialized(lmid))
+//                {
+//                    Eigen::Vector2d keypt;
+//                    multiFrame->getKeypoint(im, k, keypt);
+//                    MapPoint landmark;
+//                    estimator.getLandmark(lmid, landmark);
 
-                    imagePoints.emplace_back(keypt[0], keypt[1]);
-                    objectPoints.emplace_back(landmark.point[0]/landmark.point[3],
-                            landmark.point[1]/landmark.point[3],landmark.point[2]/landmark.point[3]);
-                }
+//                    imagePoints.emplace_back(keypt[0], keypt[1]);
+//                    objectPoints.emplace_back(landmark.point[0]/landmark.point[3],
+//                            landmark.point[1]/landmark.point[3],landmark.point[2]/landmark.point[3]);
+//                }
 
-            }
+//            }
 
-        }
+//        }
 
-        if(imagePoints.size()>5)
-        {
-            LOG(INFO) << "Start online calibration with " << imagePoints.size() << " points pair ...";
-            //LOG(INFO) << "There are " << imagePoints.size() << " imagePoints and " << objectPoints.size() << " objectPoints.";
-            cv::Mat cameraMatrix(3,3,cv::DataType<double>::type);
-            cv::setIdentity(cameraMatrix);
-            cameraMatrix.at<double>(0,0) = 432.13078374;
-            cameraMatrix.at<double>(1,1) = 430.14855392;
-            cameraMatrix.at<double>(0,2) = 305.71627069;
-            cameraMatrix.at<double>(1,2) = 266.44839265;
+//        if(imagePoints.size()>5)
+//        {
+//            LOG(INFO) << "Start rough online calibration (PnP) with " << imagePoints.size() << " points pair ...";
+//            //LOG(INFO) << "There are " << imagePoints.size() << " imagePoints and " << objectPoints.size() << " objectPoints.";
+//            cv::Mat cameraMatrix(3,3,cv::DataType<double>::type);
+//            cv::setIdentity(cameraMatrix);
+//            cameraMatrix.at<double>(0,0) = 432.13078374;
+//            cameraMatrix.at<double>(1,1) = 430.14855392;
+//            cameraMatrix.at<double>(0,2) = 305.71627069;
+//            cameraMatrix.at<double>(1,2) = 266.44839265;
 
-            cv::Mat distCoeffs(4,1,cv::DataType<double>::type);
-            distCoeffs.at<double>(0) = -0.04955165;
-            distCoeffs.at<double>(1) = 0.02744712;
-            distCoeffs.at<double>(2) = -0.00189845;
-            distCoeffs.at<double>(3) = -0.00160872;
+//            cv::Mat distCoeffs(4,1,cv::DataType<double>::type);
+//            distCoeffs.at<double>(0) = -0.04955165;
+//            distCoeffs.at<double>(1) = 0.02744712;
+//            distCoeffs.at<double>(2) = -0.00189845;
+//            distCoeffs.at<double>(3) = -0.00160872;
 
-            cv::Mat rvec(3,1,cv::DataType<double>::type);
-            cv::Mat tvec(3,1,cv::DataType<double>::type);
+//            cv::Mat rvec(3,1,cv::DataType<double>::type);
+//            cv::Mat tvec(3,1,cv::DataType<double>::type);
 
-            //cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec);
-            cv::solvePnPRansac(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec);
-            cv::Mat rotation(3,3,cv::DataType<double>::type);
-            cv::Rodrigues(rvec, rotation);
+//            //cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec);
+//            cv::solvePnPRansac(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec);
+//            cv::Mat rotation(3,3,cv::DataType<double>::type);
+//            cv::Rodrigues(rvec, rotation);
 
-            //LOG(INFO) << "rvec: " << (57.29577951*rvec).t();// in degree
-            //LOG(INFO) << "tvec: " << tvec.t();
+//            //LOG(INFO) << "rvec: " << (57.29577951*rvec).t();// in degree
+//            //LOG(INFO) << "tvec: " << tvec.t();
 
-            okvis::kinematics::Transformation T_WS, T_SC, T_CW;
-            estimator.get_T_WS(multiFrame->id(), T_WS);
-            Eigen::Matrix4d T_AB = Eigen::Matrix4d::Identity(4,4);
-            Eigen::Matrix3d rot;
-            Eigen::Vector3d t;
-            //cv2eigen(tvec, T_AB.topRightCorner<3, 1>());
-            cv::cv2eigen(tvec, t);
-            cv::cv2eigen(rotation, rot);
-            T_AB.topRightCorner<3, 1>() = t;
-            T_AB.topLeftCorner<3, 3>() = rot;
-            T_CW.set(T_AB);
+//            okvis::kinematics::Transformation T_WS, T_SC, T_CW;
+//            estimator.get_T_WS(multiFrame->id(), T_WS);
+//            Eigen::Matrix4d T_AB = Eigen::Matrix4d::Identity(4,4);
+//            Eigen::Matrix3d rot;
+//            Eigen::Vector3d t;
+//            //cv2eigen(tvec, T_AB.topRightCorner<3, 1>());
+//            cv::cv2eigen(tvec, t);
+//            cv::cv2eigen(rotation, rot);
+//            T_AB.topRightCorner<3, 1>() = t;
+//            T_AB.topLeftCorner<3, 3>() = rot;
+//            T_CW.set(T_AB);
 
-            //Want to calibrate T_SC = inv(T_WS) * T_WC
-            T_SC = T_WS.inverse()*T_CW.inverse();
-            //LOG(INFO) << "T_WC=" << T_CW.inverse().T();
-            LOG(INFO) << "Calibrated T_SC.r()=" << T_SC.r().transpose();
+//            //Want to calibrate T_SC = inv(T_WS) * T_WC
+//            T_SC = T_WS.inverse()*T_CW.inverse();
+//            //LOG(INFO) << "T_WC=" << T_CW.inverse().T();
+//            LOG(INFO) << "Calibrated T_SC.r()=" << T_SC.r().transpose();
 
-        }
-        else
-        {
-            LOG(INFO) << "Matched and initialized landmarks are not enough to do online calibration!";
-        }
+//        }
+//        else
+//        {
+//            LOG(INFO) << "Matched and initialized landmarks are not enough to do online calibration!";
+//        }
 
 
 
-    }
+//    }
   }
 
 

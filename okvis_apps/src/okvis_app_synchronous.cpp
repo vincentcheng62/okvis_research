@@ -135,7 +135,7 @@ Image imagecopy;
 std::vector<imudata> gIMUframes;
 std::vector<TimeStamp> gImageframes;
 int awayfromlastsynccounter = -1000; // used in ReadIMUData(), but also helps to determine when to turn BothStart to true
-fstream fp ,fp2, fp3;
+fstream fp ,fp2, fp3, fp4;
 int progress=0;
 double total_length_of_travel=0;
 
@@ -935,6 +935,13 @@ class PoseViewer
              << r[2] << endl;
     }
 
+    if(fp4 && extrinsic.size()>0)
+    {
+        fp4 << extrinsic[0].T()(0, 0) << ", " << extrinsic[0].T()(0, 1) << ", " <<
+               extrinsic[0].T()(0, 2) << ", " << extrinsic[0].r()[0] << ", " <<
+               extrinsic[0].r()[1] << ", " << extrinsic[0].r()[2] << endl;
+    }
+
 
 
     _heights.push_back(r[2]);
@@ -1540,7 +1547,7 @@ int main(int argc, char **argv)
   timespec starttime;
   //clock_gettime(CLOCK_REALTIME, &starttime);
   timespec_get(&starttime, TIME_UTC);
-  std::stringstream filename, filename2, filename3;
+  std::stringstream filename, filename2, filename3, filename4;
   filename << starttime.tv_sec << "result.txt";
   fp.open(filename.str(), ios::out);
   if(!fp){
@@ -1572,6 +1579,15 @@ int main(int argc, char **argv)
       cout<<"Fail to open file: "<<endl;
       std::cin.get();
   }
+
+  filename4 << starttime.tv_sec << "Extrinsic_T_SC.txt";
+  fp4.open(filename4.str(), ios::out);
+  if(!fp4){
+      cout<<"Fail to open file: "<<endl;
+      std::cin.get();
+  }
+
+  fp4 << "cos(theta), sin(theta), ~, T_SC(x), T_SC(y), T_SC(z)" << endl;
 
   fp2 << "id, x, y, z, w, quality(0-1), distance from world center, num of observations" << endl;
   okvis_estimator.setLandmarksCallback(

@@ -327,6 +327,8 @@ class ThreadedKFVio : public VioInterface {
   /// \warning Lock lastState_mutex_.
   okvis::Time lastOptimizedStateTimestamp_;
   bool lastIsInitialized_=false;
+  std::vector<okvis::kinematics::Transformation,
+      Eigen::aligned_allocator<okvis::kinematics::Transformation> > lastresultvector_of_T_SCi_;
   /// This is set to true after optimization to signal the IMU consumer loop to repropagate
   /// the state from the lastOptimizedStateTimestamp_.
   std::atomic_bool repropagationNeeded_;

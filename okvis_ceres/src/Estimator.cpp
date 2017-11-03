@@ -222,16 +222,20 @@ bool Estimator::addStates(
     SpecificSensorStatesContainer cameraInfos(2);
     cameraInfos.at(CameraSensorStates::T_SCi).exists=true;
     cameraInfos.at(CameraSensorStates::Intrinsics).exists=false;
+
+    //Determine if use online calibration
     if(((extrinsicsEstimationParametersVec_.at(i).sigma_c_relative_translation<1e-12)||
         (extrinsicsEstimationParametersVec_.at(i).sigma_c_relative_orientation<1e-12))&&
         (statesMap_.size() > 1))
     {
       // use the same block...
+      // Since in real case extrinisc relationship between imu and camera is not changed.
       cameraInfos.at(CameraSensorStates::T_SCi).id =
           lastElementIterator->second.sensors.at(SensorStates::Camera).at(i).at(CameraSensorStates::T_SCi).id;
     }
     else
     {
+      //LOG(INFO) << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa";
       const okvis::kinematics::Transformation T_SC = *multiFrame->T_SC(i);
       uint64_t id = IdProvider::instance().newId();
       std::shared_ptr<okvis::ceres::PoseParameterBlock> extrinsicsParameterBlockPtr(
@@ -285,8 +289,10 @@ bool Estimator::addStates(
       double rotationStdev = extrinsicsEstimationParametersVec_.at(i).sigma_absolute_orientation;
       double rotationVariance = rotationStdev*rotationStdev;
 
+      //Determine if use adaptive online calibration
       if(translationVariance>1.0e-16 && rotationVariance>1.0e-16)
       {
+          //LOG(INFO) << "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBb";
         const okvis::kinematics::Transformation T_SC = *multiFrame->T_SC(i);
         std::shared_ptr<ceres::PoseError > cameraPoseError(
               new ceres::PoseError(T_SC, translationVariance, rotationVariance));
@@ -300,6 +306,8 @@ bool Estimator::addStates(
       }
       else
       {
+        // use the same block...
+        // Since in real case extrinisc relationship between imu and camera is not changed.
         mapPtr_->setParameterBlockConstant(
             states.sensors.at(SensorStates::Camera).at(i).at(CameraSensorStates::T_SCi).id);
       }
@@ -356,6 +364,7 @@ bool Estimator::addStates(
       if(lastElementIterator->second.sensors.at(SensorStates::Camera).at(i).at(CameraSensorStates::T_SCi).id !=
           states.sensors.at(SensorStates::Camera).at(i).at(CameraSensorStates::T_SCi).id)
       {
+        //LOG(INFO) << "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCccc";
         // i.e. they are different estimated variables, so link them with a temporal error term
         double dt = (states.timestamp - lastElementIterator->second.timestamp)
             .toSec();

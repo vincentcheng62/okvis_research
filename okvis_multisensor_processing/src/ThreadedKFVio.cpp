@@ -1001,6 +1001,11 @@ void ThreadedKFVio::matchingLoop()
             avgdiff_norm = (avgdiff_norm*counter+fabs(T_diff.norm()))/(counter+1);
 
             LOG(INFO) << "T_WS.r() average diff so far: " << std::fixed << std::setprecision(16) << avgdiff_x << ", " << avgdiff_y << ", " <<avgdiff_z << "   norm= " << avgdiff_norm ;
+
+            okvis::kinematics::Transformation T_SC;
+            estimator_.getCameraSensorStates(frame_pairs->id(), 0, T_SC);
+            LOG(INFO) << "Optimized T_SC:" << T_SC.T();
+
             counter++;
         }
 
@@ -1021,6 +1026,13 @@ void ThreadedKFVio::matchingLoop()
         }
         //estimator_.getLandmarks(result.landmarksVector);
         lastIsInitialized_ = isInit;
+        lastresultvector_of_T_SCi_.clear();
+        for (size_t i = 0; i < parameters_.nCameraSystem.numCameras(); ++i)
+        {
+          okvis::kinematics::Transformation T_SCii;
+          estimator_.getCameraSensorStates(frame_pairs->id(), i, T_SCii);
+          lastresultvector_of_T_SCi_.push_back(T_SCii);
+        }
 
         repropagationNeeded_ = true;
       }
@@ -1199,13 +1211,14 @@ void ThreadedKFVio::imuConsumerLoop()
       result.omega_S = imuMeasurements_.back().measurement.gyroscopes
           - speedAndBiases_propagated_.segment<3>(3);
       result.IsInitialized = lastIsInitialized_;
+      result.vector_of_T_SCi = lastresultvector_of_T_SCi_;
 
-      for (size_t i = 0; i < parameters_.nCameraSystem.numCameras(); ++i)
-      {
-        result.vector_of_T_SCi.push_back(
-            okvis::kinematics::Transformation(
-                *parameters_.nCameraSystem.T_SC(i))); // just the calibrated result, not update at all!
-      }
+//      for (size_t i = 0; i < parameters_.nCameraSystem.numCameras(); ++i)
+//      {
+//        result.vector_of_T_SCi.push_back(
+//            okvis::kinematics::Transformation(
+//                *parameters_.nCameraSystem.T_SC(i)));
+//      }
       result.onlyPublishLandmarks = false;
       optimizationResults_.PushNonBlockingDroppingIfFull(result,1); // Push to the queue. If full, drop the oldest entry., max queue size is 1
     }
