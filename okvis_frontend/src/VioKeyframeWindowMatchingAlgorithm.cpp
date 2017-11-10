@@ -687,8 +687,8 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
 
     const double chi2 = err.transpose().eval() * U_tot.inverse() * err;
 
-    if (chi2 > 4.0) { // default is 4.0, set it tighter to reduce green landmark miss-match problem in close area
-        LOG(INFO) << "In 3d-2d setBestMatch, chi2=" << chi2 << " >4.0, cannot set landmark in current frame";
+    if (chi2 > 1.0) { // default is 4.0, set it tighter to reduce green landmark miss-match problem in close area
+        LOG(INFO) << "In 3d-2d setBestMatch, chi2=" << chi2 << " >1.0, cannot set landmark in current frame";
       return;
     }
 

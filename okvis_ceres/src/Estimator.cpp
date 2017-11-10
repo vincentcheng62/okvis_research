@@ -412,26 +412,26 @@ bool Estimator::addStates(
 
     //Add z-depth, roll and pitch constraint
     //T_WS is new pose propagated by imu
-//    Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Zero();
-//    information(2,2) = 1.0e2; information(3,3) = 1.0e2;
-//    information(4,4) = 1.0e2; information(5,5) = 1.0e2;
-//    okvis::kinematics::Transformation T_WS_Constraint;
-//    Eigen::Matrix4d pose_constraint;
+    Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Zero();
+    information(2,2) = 1.0e1; information(3,3) = 1.0e1;
+    information(4,4) = 1.0e1; information(5,5) = 1.0e1;
+    okvis::kinematics::Transformation T_WS_Constraint;
+    Eigen::Matrix4d pose_constraint;
 
-//    Eigen::Vector3d ea = T_WS.C().eulerAngles(0, 1, 2);
-//    pose_constraint.topLeftCorner<3, 3>() = T_WS.C();
-//    pose_constraint.topRightCorner<3, 1>() = T_WS.r();
-//    pose_constraint(2,3)=0;
-//    Eigen::Quaterniond d = euler2Quaternion(0,0,ea[2]);
-//    T_WS_Constraint.set(pose_constraint.topRightCorner<3, 1>(), d);
-//    //pose_constraint.topLeftCorner<2, 2>() = Eigen::Matrix2d::Identity();
+    Eigen::Vector3d ea = T_WS.C().eulerAngles(0, 1, 2);
+    pose_constraint.topLeftCorner<3, 3>() = T_WS.C();
+    pose_constraint.topRightCorner<3, 1>() = T_WS.r();
+    pose_constraint(2,3)=0;
+    Eigen::Quaterniond d = euler2Quaternion(0,0,ea[2]);
+    T_WS_Constraint.set(pose_constraint.topRightCorner<3, 1>(), d);
+    //pose_constraint.topLeftCorner<2, 2>() = Eigen::Matrix2d::Identity();
 
-//    LOG(INFO) << "T_WS: " << T_WS.T();
-//    LOG(INFO) << "pose_constraint: " << T_WS_Constraint.T();
+    LOG(INFO) << "T_WS: " << T_WS.T();
+    LOG(INFO) << "pose_constraint: " << T_WS_Constraint.T();
 
 
-//    std::shared_ptr<ceres::PoseError > poseError(new ceres::PoseError(T_WS_Constraint, information));
-//    mapPtr_->addResidualBlock(poseError,NULL,poseParameterBlock);
+    std::shared_ptr<ceres::PoseError > poseError(new ceres::PoseError(T_WS_Constraint, information));
+    mapPtr_->addResidualBlock(poseError,NULL,poseParameterBlock);
   }
 
   return true;

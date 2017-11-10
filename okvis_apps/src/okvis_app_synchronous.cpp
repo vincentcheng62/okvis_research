@@ -1051,8 +1051,10 @@ class PoseViewer
                     cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
 
         std::stringstream mcdifftext;
-        mcdifftext << "mouse click diff = [" << fabs(mousept.x-mouseclickpt.x) << ", " << fabs(mousept.y-mouseclickpt.y) << "]";
-        cv::putText(_image, mcdifftext.str(), cv::Point(485,135),
+        double xdiff = fabs(mousept.x-mouseclickpt.x);
+        double ydiff = fabs(mousept.y-mouseclickpt.y);
+        mcdifftext << "mouse click diff = [" << xdiff << ", " << ydiff << "]" << ", dist=" << sqrt(xdiff*xdiff+ydiff*ydiff);
+        cv::putText(_image, mcdifftext.str(), cv::Point(485,155),
                     cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
     }
 
@@ -1145,17 +1147,18 @@ class PoseViewer
 void mouse_callback(int  event, int  x, int  y, int  flag, void *param)
 {
     PoseViewer *pv = (PoseViewer*)param;
-    if (event == EVENT_MOUSEMOVE)
+
+    if (event == EVENT_LBUTTONDOWN)
+    {
+        mouseclickpt = pv->convertToMeters(cv::Point2d(x, y));
+    }
+    else if (event == EVENT_MOUSEMOVE)
     {
         mousept = pv->convertToMeters(cv::Point2d(x, y));
 //        std::stringstream postext;
 //        postext << "mouse position = [" << pt.x << ", " << pt.y << "]";
 //        cv::putText(pv->_image, postext.str(), cv::Point(15,75),
 //                    cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
-    }
-    else if (event == EVENT_MBUTTONDBLCLK)
-    {
-        mouseclickpt = pv->convertToMeters(cv::Point2d(x, y));
     }
 }
 

@@ -68,7 +68,7 @@ Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1, // center of A in A c
   // If >=2 degree is allowed, then det(A) = 1.2179*1e-3
   // If >=3 degree is allowed, then det(A) = 2.739*1e-3
   // If >=5 degree is allowed, then det(A) = 7.596*1e-3
-  const double inversecheckthreshold = 1.2179*1e-3; //  default is 1.0e-6
+  const double inversecheckthreshold = 2.739*1e-3; //  default is 1.0e-6
 
   isParallel = false; // This should be the default, whether e1 and e2 are parallel
   // But parallel and invalid is not the same. Points at infinity are valid and parallel.

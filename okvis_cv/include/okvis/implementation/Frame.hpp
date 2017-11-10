@@ -37,6 +37,9 @@
  * @author Stefan Leutenegger
  * @author Andreas Forster
  */
+#include "opencv2/imgproc/imgproc.hpp"
+#include <opencv2/core/core.hpp>
+#include <opencv2/opencv.hpp>
 
 /// \brief okvis Main namespace of this package.
 namespace okvis {
@@ -117,7 +120,33 @@ int Frame::detect()
   // run the detector
   OKVIS_ASSERT_TRUE_DBG(Exception, detector_ != NULL,
                         "Detector not initialised!");
-  detector_->detect(image_, keypoints_);
+
+  int dilation_size=2;
+  cv::Mat mask(image_.size(), CV_8UC1);
+  cv::Mat element = cv::getStructuringElement( cv::MORPH_ELLIPSE, // MORPH_ELLIPSE
+                                       cv::Size( 2*dilation_size + 1, 2*dilation_size+1 ),
+                                       cv::Point( dilation_size, dilation_size ) );
+  cv::erode( image_!=255, mask, element );
+  detector_->detect(image_, keypoints_/*, mask*/); // BRISK not support mask now, need to do it manually
+  //detector_->removeInvalidPoints(mask, keypoints_);
+
+  //cv::imwrite("zzzmask.png ", mask);
+
+  //std::cout << "mask.size(): " << mask.size() << std::endl;
+  std::vector<cv::KeyPoint> filtered_kp;
+  for(auto kpt: keypoints_)
+  {
+     //std::cout << "kpt: " << (int)kpt.pt.x << ", " << (int)kpt.pt.y << std::endl;
+     //std::cout << "at: " << mask.at<int>((int)kpt.pt.x, (int)kpt.pt.y) << std::endl;
+     if(mask.at<int>((int)kpt.pt.x, (int)kpt.pt.y)==-1)
+     {
+        filtered_kp.push_back(kpt);
+        //std::cout << "hahaha" << std::endl;
+     }
+  }
+
+  keypoints_ = filtered_kp;
+
   return keypoints_.size();
 }
 

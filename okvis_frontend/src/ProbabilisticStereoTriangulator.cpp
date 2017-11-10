@@ -241,7 +241,7 @@ bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::stereoTriangulate(
   }
 
   //if none of the reprojection error exceed 4 px
-  if (errA > 4.0 || errB > 4.0) {
+  if (errA > 1.0 || errB > 1.0) {
     //LOG(INFO) << "errA=" << errA << " > 4.0 || errB=" << errB  << " > 4.0, cannot add landmark";
     isValid = false;
   }
