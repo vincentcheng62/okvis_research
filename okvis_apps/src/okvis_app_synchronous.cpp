@@ -725,7 +725,7 @@ void ReadIMUdata(QSerialPort &serialPort, okvis::ThreadedKFVio &okvis_estimator)
     ManualStop=true;
 }
 
-cv::Point2d mousept(-9999,-9999);
+cv::Point2d mousept(-9999,-9999), mouseclickpt(-9999,-9999);
 okvis::MapPointVector landmarks, landmarks_t;
 std::map<long, Eigen::Vector3d> landmarkmap;
 
@@ -912,6 +912,7 @@ class PoseViewer
   {
 
     // just append the path
+    // T_WS transform physical pt from sensor(i.e. imu) coord to world coord
     Eigen::Vector3d r = T_WS.r(); // position
     Eigen::Matrix3d C = T_WS.C(); // Rotation
 
@@ -967,27 +968,25 @@ class PoseViewer
     // erase
     _image.setTo(cv::Scalar(10, 10, 10));
     drawPath();
+
     // draw axes
+    // x axis of imu (e.g. (1, 0, 0, 1)) will be transformed by T_WS to C.col(0)+r
+    // (e_x[0]+r[0], e_x[1]+r[1]) is the projection of this axis to the bird-view plane
     Eigen::Vector3d e_x = C.col(0);
     Eigen::Vector3d e_y = C.col(1);
     Eigen::Vector3d e_z = C.col(2);
-    cv::line(
-        _image,
+
+    cv::line(_image,
         convertToImageCoordinates(_path.back()),
-        convertToImageCoordinates(
-            _path.back() + cv::Point2d(e_x[0], e_x[1]) * _frameScale),
+        convertToImageCoordinates(_path.back() + cv::Point2d(e_x[0], e_x[1]) * _frameScale),
         cv::Scalar(0, 0, 255), 1, CV_AA);
-    cv::line(
-        _image,
+    cv::line(_image,
         convertToImageCoordinates(_path.back()),
-        convertToImageCoordinates(
-            _path.back() + cv::Point2d(e_y[0], e_y[1]) * _frameScale),
+        convertToImageCoordinates(_path.back() + cv::Point2d(e_y[0], e_y[1]) * _frameScale),
         cv::Scalar(0, 255, 0), 1, CV_AA);
-    cv::line(
-        _image,
+    cv::line(_image,
         convertToImageCoordinates(_path.back()),
-        convertToImageCoordinates(
-            _path.back() + cv::Point2d(e_z[0], e_z[1]) * _frameScale),
+        convertToImageCoordinates(_path.back() + cv::Point2d(e_z[0], e_z[1]) * _frameScale),
         cv::Scalar(255, 0, 0), 1, CV_AA);
 
     // some text:
@@ -1002,14 +1001,6 @@ class PoseViewer
     rotationtext << "rotation = [" << ea[0]*(180/M_PI) << ", " << ea[1]*(180/M_PI) << ", " << ea[2]*(180/M_PI) << "]";
     cv::putText(_image, rotationtext.str(), cv::Point(15,35),
                 cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
-
-    if(mousept.x>-1000 && mousept.y>-1000)
-    {
-        std::stringstream postext;
-        postext << "mouse position = [" << mousept.x << ", " << mousept.y << "]";
-        cv::putText(_image, postext.str(), cv::Point(15,75),
-                    cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
-    }
 
     std::stringstream veltext;
     veltext << "velocity = [" << speedAndBiases[0] << ", " << speedAndBiases[1] << ", " << speedAndBiases[2] << "]";
@@ -1041,6 +1032,27 @@ class PoseViewer
         std::stringstream lmmtext;
         lmmtext << "max=" << lmm_max << ", min=" << lmm_min << ", avg=" << lmm_avg << ", median=" << lmm_median ;
         cv::putText(_image, lmmtext.str(), cv::Point(485,95),
+                    cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
+    }
+
+    if(mousept.x>-1000 && mousept.y>-1000)
+    {
+        std::stringstream postext;
+        postext << "mouse position = [" << mousept.x << ", " << mousept.y << "]";
+        cv::putText(_image, postext.str(), cv::Point(485,115),
+                    cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
+    }
+
+    if(mouseclickpt.x>-1000 && mouseclickpt.y>-1000)
+    {
+        std::stringstream mctext;
+        mctext << "mouse click position = [" << mouseclickpt.x << ", " << mouseclickpt.y << "]";
+        cv::putText(_image, mctext.str(), cv::Point(485,135),
+                    cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
+
+        std::stringstream mcdifftext;
+        mcdifftext << "mouse click diff = [" << fabs(mousept.x-mouseclickpt.x) << ", " << fabs(mousept.y-mouseclickpt.y) << "]";
+        cv::putText(_image, mcdifftext.str(), cv::Point(485,135),
                     cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
     }
 
@@ -1140,6 +1152,10 @@ void mouse_callback(int  event, int  x, int  y, int  flag, void *param)
 //        postext << "mouse position = [" << pt.x << ", " << pt.y << "]";
 //        cv::putText(pv->_image, postext.str(), cv::Point(15,75),
 //                    cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
+    }
+    else if (event == EVENT_MBUTTONDBLCLK)
+    {
+        mouseclickpt = pv->convertToMeters(cv::Point2d(x, y));
     }
 }
 

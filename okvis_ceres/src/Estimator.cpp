@@ -107,6 +107,19 @@ void Estimator::clearImus(){
   imuParametersVec_.clear();
 }
 
+Eigen::Quaterniond
+euler2Quaternion( const double roll,
+                  const double pitch,
+                  const double yaw )
+{
+    Eigen::AngleAxisd rollAngle(roll, Eigen::Vector3d::UnitX());
+    Eigen::AngleAxisd pitchAngle(pitch, Eigen::Vector3d::UnitY());
+    Eigen::AngleAxisd yawAngle(yaw, Eigen::Vector3d::UnitZ());
+
+    Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;
+    return q;
+}
+
 // Add a pose to the state, add before matching.
 bool Estimator::addStates(
     okvis::MultiFramePtr multiFrame,
@@ -276,7 +289,8 @@ bool Estimator::addStates(
   {
     // let's add a prior
     Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Zero();
-    information(5,5) = 1.0e8; information(0,0) = 1.0e8; information(1,1) = 1.0e8; information(2,2) = 1.0e8;
+    information(0,0) = 1.0e8; information(1,1) = 1.0e8; information(2,2) = 1.0e8;
+    information(5,5) = 1.0e8;
     std::shared_ptr<ceres::PoseError > poseError(new ceres::PoseError(T_WS, information));
     /*auto id2= */ mapPtr_->addResidualBlock(poseError,NULL,poseParameterBlock);
     //mapPtr_->isJacobianCorrect(id2,1.0e-6);
@@ -302,6 +316,7 @@ bool Estimator::addStates(
             NULL,
             mapPtr_->parameterBlockPtr(
                 states.sensors.at(SensorStates::Camera).at(i).at(CameraSensorStates::T_SCi).id));
+
         //mapPtr_->isJacobianCorrect(id,1.0e-6);
       }
       else
@@ -394,6 +409,29 @@ bool Estimator::addStates(
     // only camera. this is slightly inconsistent, since the IMU error term contains both
     // a term for global states as well as for the sensor-internal ones (i.e. biases).
     // TODO: magnetometer, pressure, ...
+
+    //Add z-depth, roll and pitch constraint
+    //T_WS is new pose propagated by imu
+//    Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Zero();
+//    information(2,2) = 1.0e2; information(3,3) = 1.0e2;
+//    information(4,4) = 1.0e2; information(5,5) = 1.0e2;
+//    okvis::kinematics::Transformation T_WS_Constraint;
+//    Eigen::Matrix4d pose_constraint;
+
+//    Eigen::Vector3d ea = T_WS.C().eulerAngles(0, 1, 2);
+//    pose_constraint.topLeftCorner<3, 3>() = T_WS.C();
+//    pose_constraint.topRightCorner<3, 1>() = T_WS.r();
+//    pose_constraint(2,3)=0;
+//    Eigen::Quaterniond d = euler2Quaternion(0,0,ea[2]);
+//    T_WS_Constraint.set(pose_constraint.topRightCorner<3, 1>(), d);
+//    //pose_constraint.topLeftCorner<2, 2>() = Eigen::Matrix2d::Identity();
+
+//    LOG(INFO) << "T_WS: " << T_WS.T();
+//    LOG(INFO) << "pose_constraint: " << T_WS_Constraint.T();
+
+
+//    std::shared_ptr<ceres::PoseError > poseError(new ceres::PoseError(T_WS_Constraint, information));
+//    mapPtr_->addResidualBlock(poseError,NULL,poseParameterBlock);
   }
 
   return true;

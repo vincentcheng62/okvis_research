@@ -107,8 +107,10 @@ bool RelativePoseError::EvaluateWithMinimalJacobians(
   weighted_error = squareRootInformation_ * error;
 
   // compute Jacobian...
-  if (jacobians != NULL) {
-    if (jacobians[0] != NULL) {
+  if (jacobians != NULL)
+  {
+    if (jacobians[0] != NULL)
+    {
       Eigen::Map<Eigen::Matrix<double, 6, 7, Eigen::RowMajor> > J0(
           jacobians[0]);
       Eigen::Matrix<double, 6, 6, Eigen::RowMajor> J0_minimal;
@@ -132,8 +134,11 @@ bool RelativePoseError::EvaluateWithMinimalJacobians(
           J0_minimal_mapped = J0_minimal;
         }
       }
+
     }
-    if (jacobians[1] != NULL) {
+
+    if (jacobians[1] != NULL)
+    {
       Eigen::Map<Eigen::Matrix<double, 6, 7, Eigen::RowMajor> > J1(
           jacobians[1]);
       Eigen::Matrix<double, 6, 6, Eigen::RowMajor> J1_minimal;

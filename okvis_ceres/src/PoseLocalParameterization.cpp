@@ -128,18 +128,25 @@ bool PoseLocalParameterization::plusJacobian(const double* x,
 }
 
 // Computes the Jacobian from minimal space to naively overparameterised space as used by ceres.
+// *x is pointer to the parameters
 bool PoseLocalParameterization::liftJacobian(const double* x,
                                              double* jacobian) {
 
   Eigen::Map<Eigen::Matrix<double, 6, 7, Eigen::RowMajor> > J_lift(jacobian);
-  const Eigen::Quaterniond q_inv(x[6], -x[3], -x[4], -x[5]);
+  const Eigen::Quaterniond q_inv(x[6], -x[3], -x[4], -x[5]); // conjugation of q
   J_lift.setZero();
-  J_lift.topLeftCorner<3, 3>().setIdentity();
+  J_lift.topLeftCorner<3, 3>().setIdentity(); // translation had no lifting needed
+
+  //q_AB*q_BC = oplus(q_BC)*q_AB.coeffs()
   Eigen::Matrix4d Qplus = okvis::kinematics::oplus(q_inv);
   Eigen::Matrix<double, 3, 4> Jq_pinv;
   Jq_pinv.bottomRightCorner<3, 1>().setZero();
   Jq_pinv.topLeftCorner<3, 3>() = Eigen::Matrix3d::Identity() * 2.0;
-  J_lift.bottomRightCorner<3, 4>() = Jq_pinv * Qplus;
+
+  //Jq_pinv = [ 2 0 0 0
+  //            0 2 0 0
+  //            0 0 2 0]
+  J_lift.bottomRightCorner<3, 4>() = Jq_pinv * Qplus; // =
 
   return true;
 }

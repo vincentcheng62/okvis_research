@@ -596,6 +596,13 @@ bool ImuError::EvaluateWithMinimalJacobians(double const* const * parameters,
     speedAndBiases_1[i] = parameters[3][i];
   }
 
+  // Z-depth and Z-velocity constraint
+//  if(fabs(T_WS_0.r()[2]) > 0.02 || fabs(T_WS_1.r()[2]) > 0.02
+//      /*fabs(speedAndBiases_0[2]) > 0.005 ||  fabs(speedAndBiases_1[2]) > 0.005*/)
+//  {
+//      return false;
+//  }
+
   //One imu measurement (20 imu frames) link to 4 vertices:
   //prev and current pose, and prev and current speedAndBias
 

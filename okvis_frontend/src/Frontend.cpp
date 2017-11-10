@@ -1151,8 +1151,8 @@ int Frontend::runRansac2d2d(okvis::Estimator& estimator,
         //Use the translation of the imu guess to scale the ransac result
         //Project T_C1C2.r() onto T_C1C2_mat.topRightCorner<3, 1>() and get the vector projection
         T_C1C2_mat.topRightCorner<3, 1>() = T_C1C2_mat.topRightCorner<3, 1>()
-            * std::max( 0.0, double(T_C1C2_mat.topRightCorner<3, 1>().transpose() * T_C1C2.r())/  // r(): translation vector
-                        double(T_C1C2_mat.topRightCorner<3, 1>().transpose()*T_C1C2_mat.topRightCorner<3, 1>()));
+            * std::max( 0.0, double(T_C1C2_mat.topRightCorner<3, 1>().transpose() * T_C1C2.r())  // r(): translation vector
+                        /*double(T_C1C2_mat.topRightCorner<3, 1>().transpose()*T_C1C2_mat.topRightCorner<3, 1>())*/);
 
         LOG(INFO) << "Scale corrected T_C1C2: " << T_C1C2_mat ;
         LOG(INFO) << "Before init pose T_WS=" << T_WS0.T();

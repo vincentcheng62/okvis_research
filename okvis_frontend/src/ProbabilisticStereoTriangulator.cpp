@@ -81,13 +81,14 @@ ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::ProbabilisticStereoTriangula
       camIdA_(camIdA),
       camIdB_(camIdB),
       T_AB_(T_AB),
-      UOplus_(UOplus) {
+      UOplus_(UOplus)
+{
   T_BA_ = T_AB_.inverse();
   // also do all backprojections
 //	_frameA_ptr->computeAllBackProjections(false);
 //	_frameB_ptr->computeAllBackProjections(false);
   // prepare the pose prior, since this will not change.
-  ::okvis::ceres::PoseError poseError(T_AB_, UOplus_.inverse());
+  ::okvis::ceres::PoseError poseError(T_AB_, UOplus_.inverse()); // UOplus_ is relative uncertainty
   Eigen::Matrix<double, 6, 6, Eigen::RowMajor> J_minimal;  // Jacobian
   Eigen::Matrix<double, 7, 7, Eigen::RowMajor> J;  // Jacobian
   poseA_ = ::okvis::ceres::PoseParameterBlock(
@@ -102,7 +103,8 @@ ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::ProbabilisticStereoTriangula
   double* jacobians_minimal = J_minimal.data();
   poseError.EvaluateWithMinimalJacobians(&parameters, &residuals[0], &jacobians,
                                          &jacobians_minimal);
-  // prepare lhs of Gauss-Newton:
+  // prepare lhs of Gauss-Newton, H=JTJ:
+  // H_ is Information matrix of pose and landmark
   H_.setZero();
   H_.topLeftCorner<6, 6>() = J_minimal.transpose() * J_minimal;
 
@@ -134,7 +136,7 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::resetFrames(
   //	_frameA_ptr->computeAllBackProjections(false);
   //	_frameB_ptr->computeAllBackProjections(false);
   // prepare the pose prior, since this will not change.
-  ::okvis::ceres::PoseError poseError(T_AB_, UOplus_.inverse());
+  ::okvis::ceres::PoseError poseError(T_AB_, UOplus_.inverse()); // inverse of uncertainty is the information
   Eigen::Matrix<double, 6, 6, Eigen::RowMajor> J_minimal;  // Jacobian
   Eigen::Matrix<double, 7, 7, Eigen::RowMajor> J;  // Jacobian
 
@@ -144,14 +146,15 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::resetFrames(
   extrinsics_ = ::okvis::ceres::PoseParameterBlock(
       okvis::kinematics::Transformation(), 0, okvis::Time(0));
 
-  double residuals[6];
+  double residuals[6]; // not used, just to obtain J_minimal
   // evaluate to get the jacobian
   double* parameters = poseB_.parameters();
   double* jacobians = J.data();
   double* jacobians_minimal = J_minimal.data();
   poseError.EvaluateWithMinimalJacobians(&parameters, &residuals[0], &jacobians,
                                          &jacobians_minimal);
-  // prepare lhs of Gauss-Newton:
+  // prepare lhs of Gauss-Newton, H=JTJ:
+  // H_ is Information matrix of pose and landmark
   H_.setZero();
   H_.topLeftCorner<6, 6>() = J_minimal.transpose() * J_minimal;
   //LOG(INFO) << "resetFrames: H(lhs of Gauss-Newton: " << H_;
@@ -209,11 +212,11 @@ bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::stereoTriangulate(
       backProjectionDirectionB_inA.normalized(), sigmaR, isValid, isParallel);
 
   //If landmarks so close to camera, ignore it
-  if(frameB_->id() > 6000 && hpA[2]/hpA[3] < 1.2)
-  {
-      //LOG(INFO) << "hpA[2]/hpA[3]=" << hpA[2]/hpA[3] << ", so close to camera, ignore it!";
-      isValid = false;
-  }
+//  if(frameB_->id() > 6000 && hpA[2]/hpA[3] < 1.2)
+//  {
+//      //LOG(INFO) << "hpA[2]/hpA[3]=" << hpA[2]/hpA[3] << ", so close to camera, ignore it!";
+//      isValid = false;
+//  }
 
   outCanBeInitializedInaccuarate = !isParallel;
 
@@ -288,6 +291,7 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::getUncertainty(
 
   // calculate point uncertainty by constructing the lhs of the Gauss-Newton equation system, i.e. the Hessian or the information matrix.
   // note: the transformation T_WA is assumed constant and identity w.l.o.g.
+  // H_ now just used to determined if rank()<9, since outPointUOplus_A has no usage currently
   Eigen::Matrix<double, 9, 9> H = H_;
 
   //	keypointA_t& kptA = _frameA_ptr->keypoint(keypointIdxA);
@@ -393,7 +397,7 @@ void ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::getUncertainty(
     return;
   }
   cov = H.inverse();  // FIXME: use the QR decomposition for this...
-  outPointUOplus_A = cov.bottomRightCorner<3, 3>();
+  outPointUOplus_A = cov.bottomRightCorner<3, 3>(); // outPointUOplus_A has no usage currently
 }
 
 // Compute the reprojection error.

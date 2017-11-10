@@ -87,6 +87,11 @@ inline Eigen::Matrix<typename Eigen::internal::traits<Derived_T>::Scalar, 3, 3> 
   return crossMx(v(0, 0), v(1, 0), v(2, 0));
 }
 
+// Real matrix representation of quaternion
+// quaternion addition and multiplication correspond to matrix addition and matrix multiplication
+// However, the representation of quaternions in M(4,ℝ) is not unique
+// In fact, there exist 48 distinct representations of this form.
+// In this representation, the conjugate of a quaternion corresponds to the transpose of the matrix.
 /// \brief Plus matrix of a quaternion, i.e. q_AB*q_BC = plus(q_AB)*q_BC.coeffs().
 /// @param[in] q_AB A Quaternion.
 inline Eigen::Matrix4d plus(const Eigen::Quaterniond & q_AB) {

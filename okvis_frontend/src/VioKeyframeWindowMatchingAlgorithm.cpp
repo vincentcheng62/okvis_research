@@ -143,7 +143,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
   else
   {
     UOplus.setIdentity();
-    UOplus.bottomRightCorner<3, 3>() *= 1e-8;
+    UOplus.bottomRightCorner<3, 3>() *= 1e-8; // relative uncertainty of rotation
     uint64_t currentId = estimator_->currentFrameId();
 
     if (estimator_->isInImuWindow(currentId) && (mfIdA_ != mfIdB_))
@@ -151,6 +151,8 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::doSetup()
       okvis::SpeedAndBias speedAndBias;
       estimator_->getSpeedAndBias(currentId, 0, speedAndBias);
       double scale = std::max(1.0, speedAndBias.head<3>().norm());
+
+      // relative translation uncertainty depends on current estimated speed
       UOplus.topLeftCorner<3, 3>() *= (scale * scale) * 1.0e-2;
     }
     else
@@ -498,7 +500,7 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
 
   //Use domain knowledge of the ceiling approx height to kill wrong hP
   const double minheight = 1.8;
-  const double maxheight = 2.7;
+  const double maxheight = 6.0;
 
   if (matchingType_ == Match2D2D)
   {
@@ -531,13 +533,13 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
       return;
     }
 
-    Eigen::Vector4d hPP = T_WCa_ * hP_Ca;
-    if(frameB_->id() > 6000 && // since height measurement at the beginning is not so accurate
-            (hPP[2]/hPP[3] < minheight || hPP[2]/hPP[3] > maxheight))
-    {
-        //LOG(INFO) << "hPP violate domain knowledge: " << (T_WCa_ * hP_Ca).transpose();
-        canBeInitialized=false;
-    }
+//    Eigen::Vector4d hPP = T_WCa_ * hP_Ca;
+//    if(frameB_->id() > 6000 && // since height measurement at the beginning is not so accurate
+//            (hPP[2]/hPP[3] < minheight || hPP[2]/hPP[3] > maxheight))
+//    {
+//        //LOG(INFO) << "hPP violate domain knowledge: " << (T_WCa_ * hP_Ca).transpose();
+//        canBeInitialized=false;
+//    }
 
     // get the uncertainty
     if (canBeInitialized)
@@ -657,14 +659,14 @@ void VioKeyframeWindowMatchingAlgorithm<CAMERA_GEOMETRY_T>::setBestMatch(
     okvis::MapPoint landmark;
     estimator_->getLandmark(lmIdA, landmark);
 
-    //dont add observation for those landmarks
-    if(frameB_->id() > 6000 && // since height measurement at the beginning is not so accurate
-            (landmark.point[2]/landmark.point[3] < minheight ||
-             landmark.point[2]/landmark.point[3] > maxheight))
-    {
-        //LOG(INFO) << "hPP violate domain knowledge: " << (T_WCa_ * hP_Ca).transpose();
-        return;
-    }
+//    //dont add observation for those landmarks
+//    if(frameB_->id() > 6000 && // since height measurement at the beginning is not so accurate
+//            (landmark.point[2]/landmark.point[3] < minheight ||
+//             landmark.point[2]/landmark.point[3] > maxheight))
+//    {
+//        //LOG(INFO) << "hPP violate domain knowledge: " << (T_WCa_ * hP_Ca).transpose();
+//        return;
+//    }
 
     OKVIS_ASSERT_TRUE_DBG(Exception,lmIdB==0,"bug. Id in frame B already set.");
 

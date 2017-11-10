@@ -81,6 +81,12 @@ bool PoseError::Evaluate(double const* const * parameters, double* residuals,
   return EvaluateWithMinimalJacobians(parameters, residuals, jacobians, NULL);
 }
 
+//return the angular distance away from any modular of 180.0 degree
+double angle_diff(double angle)
+{
+    return std::min(fmod(angle, M_PI*0.5f), M_PI*0.5f-fmod(angle, M_PI*0.5f));
+}
+
 // This evaluates the error term and additionally computes
 // the Jacobians in the minimal internal representation.
 bool PoseError::EvaluateWithMinimalJacobians(double const* const * parameters,
@@ -93,27 +99,52 @@ bool PoseError::EvaluateWithMinimalJacobians(double const* const * parameters,
       Eigen::Vector3d(parameters[0][0], parameters[0][1], parameters[0][2]),
       Eigen::Quaterniond(parameters[0][6], parameters[0][3], parameters[0][4],
                          parameters[0][5]));
+
+//  // Z-depth constraint
+//  if(fabs(T_WS.r()[2]) > 0.02)
+//  {
+//      return false;
+//  }
+
   // delta pose
   okvis::kinematics::Transformation dp = measurement_ * T_WS.inverse();
   // get the error
   Eigen::Matrix<double, 6, 1> error;
-  const Eigen::Vector3d dtheta = 2 * dp.q().coeffs().head<3>();
+
+  //The rotation error in minimal representation only comprise of imaginary part
+  const Eigen::Vector3d dtheta = 2 * dp.q().coeffs().head<3>(); // coeffs == {x, y, z, w}
   error.head<3>() = measurement_.r() - T_WS.r();
+
+  // Z-depth constraint
+  //error[2] = 0.5*pow(error[2], 2) + 0.5*pow(T_WS.r()[2],2);
   error.tail<3>() = dtheta;
+
+  // Roll and pitch constraint
+  //error[3] = 0.5*pow(error[3], 2) + 0.5*pow(angle_diff(T_WS.C().eulerAngles(0, 1, 2)[0]),2);
+  //error[4] = 0.5*pow(error[4], 2) + 0.5*pow(angle_diff(T_WS.C().eulerAngles(0, 1, 2)[1]),2);
 
   // weigh it
   Eigen::Map<Eigen::Matrix<double, 6, 1> > weighted_error(residuals);
   weighted_error = squareRootInformation_ * error;
 
   // compute Jacobian...
-  if (jacobians != NULL) {
-    if (jacobians[0] != NULL) {
+  if (jacobians != NULL)
+  {
+    if (jacobians[0] != NULL)
+    {
       Eigen::Map<Eigen::Matrix<double, 6, 7, Eigen::RowMajor> > J0(
           jacobians[0]);
+
+      //In minimal space, rotation just use 3 parameters to represent
       Eigen::Matrix<double, 6, 6, Eigen::RowMajor> J0_minimal;
       J0_minimal.setIdentity();
       J0_minimal *= -1.0;
-      J0_minimal.block<3, 3>(3, 3) = -okvis::kinematics::plus(dp.q())
+      //J0_minimal(2, 2) = 2*T_WS.r()[2]-measurement_.r()[2];
+
+      // Plus matrix of a quaternion, i.e. q_AB*q_BC = plus(q_AB)*q_BC.coeffs()
+      // differentation w.r.t delta alpha - equation(6)
+      // where when delta alpha is small, dp can be approximated by identity quaternion+0.5(Identity + bottom zero)*delta alpha -equation(6)
+      J0_minimal.block<3, 3>(3, 3) = -okvis::kinematics::plus(dp.q()) // by equation 19, dp = delta pose
           .topLeftCorner<3, 3>();
       J0_minimal = (squareRootInformation_ * J0_minimal).eval();
 
@@ -122,6 +153,9 @@ bool PoseError::EvaluateWithMinimalJacobians(double const* const * parameters,
       PoseLocalParameterization::liftJacobian(parameters[0], J_lift.data());
 
       // hallucinate Jacobian w.r.t. state
+      // J0_minimal is the jacobian in the reduced tangent space,
+      // times J_lift to transform it to the jacobian in the original space
+      // By chain rule, the J_lift is just differentiate delta_alpha w.r.t. delta q
       J0 = J0_minimal * J_lift;
 
       if (jacobiansMinimal != NULL) {

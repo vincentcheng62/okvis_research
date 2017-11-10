@@ -15,8 +15,8 @@ cameras:
 
 camera_params:
     camera_rate: 25 # just to manage the expectations of when there should be frames arriving
-    sigma_absolute_translation: 3.5e-3 # The standard deviation of the camera extrinsics translation, affect pose error, e.g. 3.0e-3 for online-calib [m]. absolute added to residual at the 1st time
-    sigma_absolute_orientation: 2.0e-2 # The standard deviation of the camera extrinsics orientation, affect pose error e.g. 2.0e-2 for online-calib [rad]. absolute added to residual at the 1st time
+    sigma_absolute_translation: 0.0 # The standard deviation of the camera extrinsics translation, affect pose error, e.g. 3.0e-3 for online-calib [m]. absolute added to residual at the 1st time
+    sigma_absolute_orientation: 0.0 # The standard deviation of the camera extrinsics orientation, affect pose error e.g. 2.0e-2 for online-calib [rad]. absolute added to residual at the 1st time
     sigma_c_relative_translation: 0.0 # The std. dev. of the cam. extr. transl. change between frames, affect relative pose error e.g. 1.0e-6 for adaptive online calib (not less for numerics) [m]. relative is added to residual
     sigma_c_relative_orientation: 0.0 # The std. dev. of the cam. extr. orient. change between frames, affect relative pose error e.g. 1.0e-6 for adaptive online calib (not less for numerics) [rad].. relative is added to residual
     timestamp_tolerance: 0.005 # [s] stereo frame out-of-sync tolerance
