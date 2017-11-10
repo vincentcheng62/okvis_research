@@ -65,7 +65,7 @@ detection_options:
     matching_ratio_threshold: 3.0 # the ratio threshold s.t. second/best>threshold will be matched
     matching_best_second_min_dist: 20.0
     octaves: 3           # number of octaves for detection. 0 means single-scale at highest resolution
-    maxNoKeypoints: 120  # restrict to a maximum of this many keypoints per image (strongest ones)
+    maxNoKeypoints: 600  # restrict to a maximum of this many keypoints per image (strongest ones)
     IsHarris: true        # is using Fast or sse Harris corner detector (the original)
     rotation_only_threshold: 0.92   # default is 0.8, higher will make initialization easier but have a higher chance of orientation initialization only
 

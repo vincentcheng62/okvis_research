@@ -206,7 +206,7 @@ bool ProbabilisticStereoTriangulator<CAMERA_GEOMETRY_T>::stereoTriangulate(
   // But it is possible that they are parallel but valid
   // So the landmark will not be initialized but set the depth to 1000m
   // hpA is the output triangulated homogenous point of A in A coordinate
-  Eigen::Vector4d hpA = triangulateFast(
+  Eigen::Vector4d hpA = triangulateFast(frameB_->id(),
       Eigen::Vector3d(0, 0, 0),  // center of A in A coordinates (0,0,0)
       backProjectionDirectionA_inA.normalized(), T_AB_.r(),  // center of B in A coordinates
       backProjectionDirectionB_inA.normalized(), sigmaR, isValid, isParallel);

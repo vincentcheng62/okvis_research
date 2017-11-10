@@ -49,7 +49,8 @@ namespace okvis {
 namespace triangulation {
 
 // Triangulate the intersection of two rays.
-Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1, // center of A in A coordinate
+Eigen::Vector4d triangulateFast(const uint64_t FrameID,
+                                const Eigen::Vector3d& p1, // center of A in A coordinate
                                 const Eigen::Vector3d& e1, // back project direction for keypt A in A coordinate, a unit vector
                                 const Eigen::Vector3d& p2, // center of B in A coordinate
                                 const Eigen::Vector3d& e2, // back project direction for keypt B in A coordinate, a unit vector
@@ -68,7 +69,14 @@ Eigen::Vector4d triangulateFast(const Eigen::Vector3d& p1, // center of A in A c
   // If >=2 degree is allowed, then det(A) = 1.2179*1e-3
   // If >=3 degree is allowed, then det(A) = 2.739*1e-3
   // If >=5 degree is allowed, then det(A) = 7.596*1e-3
-  const double inversecheckthreshold = 2.739*1e-3; //  default is 1.0e-6
+  double inversecheckthreshold = 3.0458*1e-4; //  default is 1.0e-6
+
+  //At the beginning, in order to avoid system scale drift, a larger
+  //angle is required for triangulation
+  if(FrameID<6000)
+  {
+      inversecheckthreshold = std::max(2.739*1e-3, inversecheckthreshold);
+  }
 
   isParallel = false; // This should be the default, whether e1 and e2 are parallel
   // But parallel and invalid is not the same. Points at infinity are valid and parallel.

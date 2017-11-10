@@ -121,7 +121,7 @@ int Frame::detect()
   OKVIS_ASSERT_TRUE_DBG(Exception, detector_ != NULL,
                         "Detector not initialised!");
 
-  int dilation_size=2;
+  int dilation_size=7;
   cv::Mat mask(image_.size(), CV_8UC1);
   cv::Mat element = cv::getStructuringElement( cv::MORPH_ELLIPSE, // MORPH_ELLIPSE
                                        cv::Size( 2*dilation_size + 1, 2*dilation_size+1 ),
@@ -137,8 +137,8 @@ int Frame::detect()
   for(auto kpt: keypoints_)
   {
      //std::cout << "kpt: " << (int)kpt.pt.x << ", " << (int)kpt.pt.y << std::endl;
-     //std::cout << "at: " << mask.at<int>((int)kpt.pt.x, (int)kpt.pt.y) << std::endl;
-     if(mask.at<int>((int)kpt.pt.x, (int)kpt.pt.y)==-1)
+     //std::cout << "at: " << (int)mask.at<uchar>((int)kpt.pt.x, (int)kpt.pt.y) << std::endl;
+     if((int)mask.at<uchar>((int)kpt.pt.y, (int)kpt.pt.x)==255)
      {
         filtered_kp.push_back(kpt);
         //std::cout << "hahaha" << std::endl;

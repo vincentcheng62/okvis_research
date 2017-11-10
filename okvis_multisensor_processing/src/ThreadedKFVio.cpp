@@ -1513,6 +1513,9 @@ void ThreadedKFVio::publisherLoop()
 {
   for (;;)
   {
+    //cv::waitKey(50); // broadcast at a rate of 20Hz
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
     // get the result data
     OptimizationResults result;
     if (optimizationResults_.PopBlocking(&result) == false)
