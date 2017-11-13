@@ -1188,7 +1188,7 @@ int main3(int argc, char **argv)
 //Do the linear optimization between OKVIS output and AGV odometry
 //1st arg: okvis output
 //2nd arg: AGV odometry
-int main5(int argc, char **argv)
+int main2(int argc, char **argv)
 {
     if (argc < 3)
     {

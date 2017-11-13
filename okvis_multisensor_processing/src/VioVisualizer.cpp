@@ -130,6 +130,7 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
                       "mixed frame types are not supported yet");
   }
 
+  int total_lm_this_frame=0;
   //observation contains all the keypoint information after each optimization loop
   for (auto it = data->observations.begin(); it != data->observations.end(); ++it)
   {
@@ -148,6 +149,7 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
     keypoint = it->keypointMeasurement;
     if (fabs(it->landmark_W[3]) > 1.0e-8) // landmark_W: landmark as homogeneous point in body frame B, landmark_W[3]==0 means the point in infinity
     {
+      total_lm_this_frame++;
       Eigen::Vector4d hPoint = it->landmark_W;
       if (it->isInitialized) {
         color = cv::Scalar(0, 255, 0);  // green: 3D-2D match
@@ -219,16 +221,20 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
         heighttext << std::fixed << std::setprecision(2) << hPoint[2]/hPoint[3] << "m";
 
         //print some at bottom and some at top image to avoid display too overlap
-        if(it->landmarkId%2==0)
+        if (it->isInitialized)
         {
-            cv::putText(actKeyframe, heighttext.str(), cv::Point2f(keyframePt[0]+20, keyframePt[1]-20),
-                            cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,255,0), 1);
+            if(it->landmarkId%2==0)
+            {
+                cv::putText(actKeyframe, heighttext.str(), cv::Point2f(keyframePt[0]+20, keyframePt[1]-20),
+                                cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,255,0), 1);
+            }
+            else
+            {
+                cv::putText(outimg, heighttext.str(), cv::Point2f(keypoint[0]+20, keypoint[1]+20 + rowJump),
+                                cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,255,0), 1);
+            }
         }
-        else
-        {
-            cv::putText(outimg, heighttext.str(), cv::Point2f(keypoint[0]+20, keypoint[1]+20 + rowJump),
-                            cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,255,0), 1);
-        }
+
 
       }
     }
@@ -253,6 +259,12 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
 
 
   }
+
+  std::stringstream currentframelm;
+  currentframelm << "frame #Landmarks= " << total_lm_this_frame;
+  cv::putText(current, currentframelm.str(), cv::Point(15,35),
+              cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,0,255), 1);
+
   return outimg;
 }
 

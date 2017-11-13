@@ -1269,7 +1269,7 @@ void ThreadedKFVio::visualizationLoop()
     std::vector<cv::Mat> out_images(parameters_.nCameraSystem.numCameras());
     for (size_t i = 0; i < parameters_.nCameraSystem.numCameras(); ++i)
     {
-      out_images[i] = visualizer_.drawMatches(new_data, i, 2);
+      out_images[i] = visualizer_.drawMatches(new_data, i, parameters_.publishing.drawingmode);
     }
 	displayImages_.PushNonBlockingDroppingIfFull(out_images,1);
   }

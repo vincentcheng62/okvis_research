@@ -298,6 +298,11 @@ void VioParametersReader::readConfigFile(const std::string& filename) {
         (int) (file["publishing_options"]["maxPathLength"]);
   }
 
+  if (file["publishing_options"]["drawingmode"].isInt()) {
+    vioParameters_.publishing.drawingmode =
+        (int) (file["publishing_options"]["drawingmode"]);
+  }
+
   parseBoolean(file["publishing_options"]["publishImuPropagatedState"],
                    vioParameters_.publishing.publishImuPropagatedState);
 

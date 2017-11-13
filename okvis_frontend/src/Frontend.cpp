@@ -84,8 +84,11 @@ Frontend::Frontend(size_t numCameras)
       briskMatching_best_second_min_dist_(10),
       matcher_(
           std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(1, 8, true))), // default 4: 4 matcher threads, 4 num of best, dont use distance ratio
-      keyframeInsertionOverlapThreshold_(0.6), // default 0.6, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
-      keyframeInsertionMatchingRatioThreshold_(0.2),//default 0.2, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
+
+      //Either one of them smaller than the below value will create a new keyframe
+      keyframeInsertionOverlapThreshold_(0.4), // default 0.6, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
+      keyframeInsertionMatchingRatioThreshold_(0.15),//default 0.2, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
+
       rotation_only_ratio_(0.9), // default is 0.8, make it larger so easier to initialize
       ransacinlinersminnumber_(10), // default is 10
       ransacthreshold_(2), //default is 9, is the reprojection error in pixels?
@@ -406,11 +409,17 @@ bool Frontend::doWeNeedANewKeyframe(
       }
     }
 
-    if (frameBPoints.size() < 3)
+    if (frameBPoints.size() < 3) // frameBMatches.size()= num of keypt in frameB
+    {
+      LOG(INFO) << "frameBPoints.size() < 3, continue";
       continue;
+    }
     cv::convexHull(frameBPoints, frameBHull);
-    if (frameBMatches.size() < 3)
+    if (frameBMatches.size() < 3) // frameBMatches.size() = num of keypt in frameB whose landmarkID!=0
+    {
+      LOG(INFO) << "frameBMatches.size() < 3, continue";
       continue;
+    }
     cv::convexHull(frameBMatches, frameBMatchesHull);
 
     // areas
@@ -419,6 +428,8 @@ bool Frontend::doWeNeedANewKeyframe(
 
     // overlap area
     double overlapArea = frameBMatchesArea / frameBArea;
+    LOG(INFO) << "frameBMatchesArea: " << frameBMatchesArea << ", frameBArea: " << frameBArea;
+
     // matching ratio inside overlap area: count
     int pointsInFrameBMatchesArea = 0;
     if (frameBMatchesHull.size() > 2)
@@ -432,6 +443,7 @@ bool Frontend::doWeNeedANewKeyframe(
     }
 
     double matchingRatio = double(frameBMatches.size()) / double(pointsInFrameBMatchesArea);
+    LOG(INFO) << "frameBMatches.size(): " << frameBMatches.size() << ", pointsInFrameBMatchesArea: " << pointsInFrameBMatchesArea;
 
     // calculate overlap score, take the max. among all multi-frames
     overlap = std::max(overlapArea, overlap);

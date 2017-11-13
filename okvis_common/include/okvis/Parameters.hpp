@@ -276,6 +276,7 @@ struct PublishingParameters {
   float landmarkQualityThreshold = 1.0e-5; ///< Quality threshold under which landmarks are not published. Between 0 and 1.
   float maxLandmarkQuality = 0.05; ///< Quality above which landmarks are assumed to be of the best quality. Between 0 and 1.
   size_t maxPathLength = 100 ; ///< Maximum length of ros::nav_mgsgs::Path to be published.
+  int drawingmode = 1; ///< 0 all types, 1 only green and yellow, 2 only green
   bool publishImuPropagatedState = true; ///< Should the state that is propagated with IMU messages be published? Or just the optimized ones?
   okvis::kinematics::Transformation T_Wc_W = okvis::kinematics::Transformation::Identity(); ///< Provide custom World frame Wc
   FrameName trackedBodyFrame = FrameName::B; ///< B or S, the frame of reference that will be expressed relative to the selected worldFrame Wc
