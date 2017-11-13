@@ -163,10 +163,10 @@ bool Estimator::addStates(
             mapPtr_->parameterBlockPtr(speedAndBias_id))->estimate(); // estimate(): just get back the speedAndBias from parameters_[i] struct
 
     // if image between current frame and last frame really change
-    // On average 3 graylevel noise for each pixel
-    const double SAD_threshold_ratio = 3.0; // Sum of absolute difference threshold, a ratio to current image size
+    // On average 2.5 graylevel noise for each pixel
+    const double SAD_threshold_ratio = 2.5; // Sum of absolute difference threshold, a ratio to current image size
     double SAD_threshold = SAD_threshold_ratio * multiFrame->image(0).size().height * multiFrame->image(0).size().width;
-    uint64_t lastFrameId = frameIdByAge(1);
+    uint64_t lastFrameId = frameIdByAge(std::min(5, (int)(numFrames()-1)));
     double SAD = cv::sum(abs(multiFrame->image(0)-this->multiFrame(lastFrameId)->image(0)))[0];
     LOG(INFO) << "SAD= " << SAD << ", SAD_threshold= " << SAD_threshold << ", threshold_ratio= " << SAD_threshold_ratio;
     if( SAD > SAD_threshold)
@@ -203,7 +203,10 @@ bool Estimator::addStates(
     }
     else
     {
-        LOG(INFO) << "SAD < SAD_threshold, imu will not integrate!";
+        LOG(INFO) << "SAD < SAD_threshold, imu will not integrate! setting velocity to zero";
+        speedAndBias[0] = 0.0;
+        speedAndBias[1] = 0.0;
+        speedAndBias[2] = 0.0;
     }
 
   }
@@ -426,8 +429,8 @@ bool Estimator::addStates(
     // TODO: magnetometer, pressure, ...
 
     //Only add constraint when okvis is stablized
-    if(multiFrame->id()>6000)
-    {
+    //if(multiFrame->id()>6000)
+    //{
         //Add z-depth, roll and pitch constraint
         //T_WS is new pose propagated by imu
         Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Zero();
@@ -450,7 +453,7 @@ bool Estimator::addStates(
 
         std::shared_ptr<ceres::PoseError > poseError(new ceres::PoseError(T_WS_Constraint, information));
         mapPtr_->addResidualBlock(poseError,NULL,poseParameterBlock);
-    }
+    //}
 
 
   }

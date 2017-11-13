@@ -64,6 +64,7 @@ class VioVisualizer {
     typedef std::shared_ptr<VisualizationData> Ptr;
     okvis::ObservationVector observations;    ///< Vector containing all the keypoint observations.
     std::shared_ptr<okvis::MultiFrame> currentFrames; ///< Current multiframe.
+    std::shared_ptr<okvis::MultiFrame> lastFrames; ///< Current multiframe.
     std::shared_ptr<okvis::MultiFrame> keyFrames;     ///< Current keyframe.
     okvis::kinematics::Transformation T_WS_keyFrame;  ///< Pose of the current keyframe
   };

@@ -571,6 +571,7 @@ void ThreadedKFVio::matchingLoop()
   srand(1); // srand() applies globally, so fix rand() seed of all ransac functions in opengv
   clock_t end, begin;
   bool isInit=false;
+  double average_time=0, max_running_time=0;
   //long long counter=0;
   for (;;)
   {
@@ -579,7 +580,7 @@ void ThreadedKFVio::matchingLoop()
     //Frame consumer loop content
     //(1) propagate imu measurement (2) Do detectAndDescribe() (3) Push keypt measurements
       //LOG(INFO) << "frameConsumerLoop: " << counter;
-      //counter++;
+      counter++;
 
       begin = clock();
       // get data and check for termination request
@@ -691,8 +692,8 @@ void ThreadedKFVio::matchingLoop()
         waitForFrameSynchronizerMutexTimer2.stop();
         frameSynchronizer_.detectionEndedForMultiFrame(multiFrame->id());
 
-        if (frameSynchronizer_.detectionCompletedForAllCameras(
-            multiFrame->id())) {
+        if (frameSynchronizer_.detectionCompletedForAllCameras(multiFrame->id()))
+        {
   //        LOG(INFO) << "detection completed for multiframe with id "<< multi_frame->id();
           push = true;
         }
@@ -838,66 +839,6 @@ void ThreadedKFVio::matchingLoop()
 
     end = clock();
     //LOG(INFO) << "Matching loop run in " << (double(end - begin)) / CLOCKS_PER_SEC << "seconds" ;
-
-    // Imu consumer loop content
-//    LOG(INFO) << "imuConsumerLoop: " << counter;
-//    counter++;
-//    // get data and check for termination request
-//    if (imuMeasurementsReceived_.PopBlocking(&data) == false)
-//      return;
-//    processImuTimer.start();
-//    okvis::Time start;
-//    const okvis::Time* end;  // do not need to copy end timestamp
-//    {
-//      std::lock_guard<std::mutex> imuLock(imuMeasurements_mutex_);
-//      OKVIS_ASSERT_TRUE(Exception,
-//                        imuMeasurements_.empty()
-//                        || imuMeasurements_.back().timeStamp < data.timeStamp,
-//                        "IMU measurement from the past received");
-
-//      if (parameters_.publishing.publishImuPropagatedState) {
-//        if (!repropagationNeeded_ && imuMeasurements_.size() > 0) {
-//          start = imuMeasurements_.back().timeStamp;
-//        } else if (repropagationNeeded_) {
-//          std::lock_guard<std::mutex> lastStateLock(lastState_mutex_);
-//          start = lastOptimizedStateTimestamp_;
-//          T_WS_propagated_ = lastOptimized_T_WS_;
-//          speedAndBiases_propagated_ = lastOptimizedSpeedAndBiases_;
-//          repropagationNeeded_ = false;
-//        } else
-//          start = okvis::Time(0, 0);
-//        end = &data.timeStamp;
-//      }
-//      imuMeasurements_.push_back(data);
-//    }  // unlock _imuMeasurements_mutex
-
-//    // notify other threads that imu data with timeStamp is here.
-//    imuFrameSynchronizer_.gotImuData(data.timeStamp);
-
-//    if (parameters_.publishing.publishImuPropagatedState) {
-//      Eigen::Matrix<double, 15, 15> covariance;
-//      Eigen::Matrix<double, 15, 15> jacobian;
-
-//      frontend_.propagation(imuMeasurements_, imu_params_, T_WS_propagated_,
-//                            speedAndBiases_propagated_, start, *end, &covariance,
-//                            &jacobian);
-//      OptimizationResults result;
-//      result.stamp = *end;
-//      result.T_WS = T_WS_propagated_;
-//      result.speedAndBiases = speedAndBiases_propagated_;
-//      result.omega_S = imuMeasurements_.back().measurement.gyroscopes
-//          - speedAndBiases_propagated_.segment<3>(3);
-//      for (size_t i = 0; i < parameters_.nCameraSystem.numCameras(); ++i) {
-//        result.vector_of_T_SCi.push_back(
-//            okvis::kinematics::Transformation(
-//                *parameters_.nCameraSystem.T_SC(i)));
-//      }
-//      result.onlyPublishLandmarks = false;
-//      optimizationResults_.PushNonBlockingDroppingIfFull(result,1);
-//    }
-//    processImuTimer.stop();
-
-    // Imu consumer loop end
 
     begin = clock();
     //Optimization content
@@ -1092,8 +1033,7 @@ void ThreadedKFVio::matchingLoop()
       // adding further elements to result that do not access estimator.
       for (size_t i = 0; i < parameters_.nCameraSystem.numCameras(); ++i)
       {
-        result.vector_of_T_SCi.push_back(
-            okvis::kinematics::Transformation(
+        result.vector_of_T_SCi.push_back(okvis::kinematics::Transformation(
                 *parameters_.nCameraSystem.T_SC(i)));
       }
     }
@@ -1103,41 +1043,19 @@ void ThreadedKFVio::matchingLoop()
     if (parameters_.visualization.displayImages)
     {
       visualizationDataPtr->currentFrames = frame_pairs;
+      visualizationDataPtr->lastFrames = estimator_.multiFrame(estimator_.frameIdByAge(std::min(5, (int)(estimator_.numFrames()-1))));
       visualizationData_.PushNonBlockingDroppingIfFull(visualizationDataPtr, 1);
     }
     afterOptimizationTimer.stop();
 
 
     end = clock();
-    //LOG(INFO) << "Optimization loop run in " << (double(end - begin)) / CLOCKS_PER_SEC << "seconds";
+    average_time = (average_time*(counter-1)+(double(end - begin)))/(counter);
+    if(double(end-begin)>max_running_time) max_running_time = double(end-begin);
+    LOG(INFO) << "Matching(single thread) loop run in " << (double(end - begin)) / CLOCKS_PER_SEC << "seconds";
+    LOG(INFO) << "average matching loop run in " << average_time / CLOCKS_PER_SEC << "seconds";
+    LOG(INFO) << "maximum matching loop run in " << max_running_time / CLOCKS_PER_SEC << "seconds";
     //Optimization content end
-
-
-    //Publisher loop content
-//    begin = clock();
-
-//    // get the result data
-//    OptimizationResults resultP;
-//    if (optimizationResults_.PopBlocking(&resultP) == false)
-//      return;
-
-//    // call all user callbacks
-//    if (stateCallback_ && !resultP.onlyPublishLandmarks)
-//      stateCallback_(resultP.stamp, resultP.T_WS);
-//    if (fullStateCallback_ && !resultP.onlyPublishLandmarks)
-//      fullStateCallback_(resultP.stamp, resultP.T_WS, resultP.speedAndBiases,
-//                         resultP.omega_S);
-//    if (fullStateCallbackWithExtrinsics_ && !resultP.onlyPublishLandmarks)
-//      fullStateCallbackWithExtrinsics_(resultP.stamp, resultP.T_WS,
-//                                       resultP.speedAndBiases, resultP.omega_S,
-//                                       resultP.vector_of_T_SCi);
-//    if (landmarksCallback_ && !resultP.landmarksVector.empty())
-//      landmarksCallback_(resultP.stamp, resultP.landmarksVector,
-//                         resultP.transferredLandmarks);  //TODO(gohlp): why two maps?
-//    //Publisher loop end
-//    end = clock();
-//    LOG(INFO) << "Publisher loop run in " << (double(end - begin)) / CLOCKS_PER_SEC << "seconds";
-
 
   }
 }

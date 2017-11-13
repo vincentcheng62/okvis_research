@@ -80,6 +80,7 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
 
   std::shared_ptr<okvis::MultiFrame> keyframe = data->keyFrames;
   std::shared_ptr<okvis::MultiFrame> frame = data->currentFrames;
+  std::shared_ptr<okvis::MultiFrame> lastframe = data->lastFrames;
 
   if (keyframe == nullptr)
     return frame->image(image_number);
@@ -264,6 +265,21 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
   currentframelm << "frame #Landmarks= " << total_lm_this_frame;
   cv::putText(current, currentframelm.str(), cv::Point(15,35),
               cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,0,255), 1);
+
+  //Output whether SAD test is passed and IMU got integrated
+  const double SAD_threshold_ratio = 2.5; // Sum of absolute difference threshold, a ratio to current image size
+  double SAD_threshold = SAD_threshold_ratio * frame->image(0).size().height * frame->image(0).size().width;
+  double SAD = cv::sum(abs(frame->image(0)-lastframe->image(0)))[0];
+
+  std::stringstream sadtest;
+  if(SAD < SAD_threshold)
+  {
+      sadtest << "IMU no integration";
+      cv::putText(current, sadtest.str(), cv::Point(15,55),
+                  cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,0,255), 2);
+  }
+
+
 
   return outimg;
 }
