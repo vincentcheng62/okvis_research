@@ -137,7 +137,7 @@ Eigen::Vector4d triangulateFast(const uint64_t FrameID,
   if (!invertible)
   {
     isParallel = true; // let's note this.
-    LOG(INFO) << "The rays are parallel, the landmark will not be initialized";
+    //LOG(INFO) << "The rays are parallel, the landmark will not be initialized";
     // parallel. that's fine. but A is not invertible. so handle it separately.
     if ((e1.cross(e2)).norm() < 6 * sigma) // if it is highly parallel
     {

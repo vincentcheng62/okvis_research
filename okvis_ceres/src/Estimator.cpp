@@ -162,35 +162,50 @@ bool Estimator::addStates(
     speedAndBias = std::static_pointer_cast<ceres::SpeedAndBiasParameterBlock>(
             mapPtr_->parameterBlockPtr(speedAndBias_id))->estimate(); // estimate(): just get back the speedAndBias from parameters_[i] struct
 
-    // propagate pose and speedAndBias
-    int numUsedImuMeasurements = ceres::ImuError::propagation(
-        imuMeasurements, imuParametersVec_.at(0), T_WS, speedAndBias,
-        statesMap_.rbegin()->second.timestamp, multiFrame->timestamp());
+    // if image between current frame and last frame really change
+    // On average 3 graylevel noise for each pixel
+    const double SAD_threshold_ratio = 3.0; // Sum of absolute difference threshold, a ratio to current image size
+    double SAD_threshold = SAD_threshold_ratio * multiFrame->image(0).size().height * multiFrame->image(0).size().width;
+    uint64_t lastFrameId = frameIdByAge(1);
+    double SAD = cv::sum(abs(multiFrame->image(0)-this->multiFrame(lastFrameId)->image(0)))[0];
+    LOG(INFO) << "SAD= " << SAD << ", SAD_threshold= " << SAD_threshold << ", threshold_ratio= " << SAD_threshold_ratio;
+    if( SAD > SAD_threshold)
+    {
+        // propagate pose and speedAndBias
+        int numUsedImuMeasurements = ceres::ImuError::propagation(
+            imuMeasurements, imuParametersVec_.at(0), T_WS, speedAndBias,
+            statesMap_.rbegin()->second.timestamp, multiFrame->timestamp());
 
-    //Domain knowledge constraint, z-axis has no movement, so set z-depth and z-velocity=0
-//    if(multiFrame->id()>6000) // add constraint after initialization is stable
-//    {
-//          Eigen::Vector3d temp_r = T_WS.r();
-//          temp_r[2]=0;
-//          T_WS.set(temp_r,T_WS.q());
-//          speedAndBias[2] = 0;
-//    }
+        //Domain knowledge constraint, z-axis has no movement, so set z-depth and z-velocity=0
+    //    if(multiFrame->id()>6000) // add constraint after initialization is stable
+    //    {
+    //          Eigen::Vector3d temp_r = T_WS.r();
+    //          temp_r[2]=0;
+    //          T_WS.set(temp_r,T_WS.q());
+    //          speedAndBias[2] = 0;
+    //    }
 
 
-    LOG(INFO) << numUsedImuMeasurements << " imu measurements are propagated in addStates()";
-    LOG(INFO) << "Start: " << statesMap_.rbegin()->second.timestamp << ", end: " << multiFrame->timestamp();
-    LOG(INFO) << "T_WS.r() is: "  << std::fixed << std::setprecision(16) << T_WS.r()[0] << ", " << T_WS.r()[1] << ", " << T_WS.r()[2] ;
+        LOG(INFO) << numUsedImuMeasurements << " imu measurements are propagated in addStates()";
+        LOG(INFO) << "Start: " << statesMap_.rbegin()->second.timestamp << ", end: " << multiFrame->timestamp();
+        LOG(INFO) << "T_WS.r() is: "  << std::fixed << std::setprecision(16) << T_WS.r()[0] << ", " << T_WS.r()[1] << ", " << T_WS.r()[2] ;
 
-    Eigen::Vector3d eaf = T_WS.C().eulerAngles(0, 1, 2);
-    LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << std::fixed << std::setprecision(16) << eaf[0] << ", " << eaf[1] << ", " << eaf[2] ;
-    LOG(INFO) << "SpeedAndBias is: " << speedAndBias.transpose();
+        Eigen::Vector3d eaf = T_WS.C().eulerAngles(0, 1, 2);
+        LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << std::fixed << std::setprecision(16) << eaf[0] << ", " << eaf[1] << ", " << eaf[2] ;
+        LOG(INFO) << "SpeedAndBias is: " << speedAndBias.transpose();
 
-    OKVIS_ASSERT_TRUE_DBG(Exception, numUsedImuMeasurements > 1,
-                       "propagation failed");
-    if (numUsedImuMeasurements < 1){
-      LOG(INFO) << "numUsedImuMeasurements=" << numUsedImuMeasurements;
-      return false;
+        OKVIS_ASSERT_TRUE_DBG(Exception, numUsedImuMeasurements > 1,
+                           "propagation failed");
+        if (numUsedImuMeasurements < 1){
+          LOG(INFO) << "numUsedImuMeasurements=" << numUsedImuMeasurements;
+          return false;
+        }
     }
+    else
+    {
+        LOG(INFO) << "SAD < SAD_threshold, imu will not integrate!";
+    }
+
   }
 
 
@@ -410,28 +425,34 @@ bool Estimator::addStates(
     // a term for global states as well as for the sensor-internal ones (i.e. biases).
     // TODO: magnetometer, pressure, ...
 
-    //Add z-depth, roll and pitch constraint
-    //T_WS is new pose propagated by imu
-    Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Zero();
-    information(2,2) = 1.0e1; information(3,3) = 1.0e1;
-    information(4,4) = 1.0e1; information(5,5) = 1.0e1;
-    okvis::kinematics::Transformation T_WS_Constraint;
-    Eigen::Matrix4d pose_constraint;
+    //Only add constraint when okvis is stablized
+    if(multiFrame->id()>6000)
+    {
+        //Add z-depth, roll and pitch constraint
+        //T_WS is new pose propagated by imu
+        Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Zero();
+        information(2,2) = 1.0e1; information(3,3) = 1.0e1;
+        information(4,4) = 1.0e1; information(5,5) = 1.0e1;
+        okvis::kinematics::Transformation T_WS_Constraint;
+        Eigen::Matrix4d pose_constraint;
 
-    Eigen::Vector3d ea = T_WS.C().eulerAngles(0, 1, 2);
-    pose_constraint.topLeftCorner<3, 3>() = T_WS.C();
-    pose_constraint.topRightCorner<3, 1>() = T_WS.r();
-    pose_constraint(2,3)=0;
-    Eigen::Quaterniond d = euler2Quaternion(0,0,ea[2]);
-    T_WS_Constraint.set(pose_constraint.topRightCorner<3, 1>(), d);
-    //pose_constraint.topLeftCorner<2, 2>() = Eigen::Matrix2d::Identity();
+        Eigen::Vector3d ea = T_WS.C().eulerAngles(0, 1, 2);
+        pose_constraint.topLeftCorner<3, 3>() = T_WS.C();
+        pose_constraint.topRightCorner<3, 1>() = T_WS.r();
+        pose_constraint(2,3)=0;
+        Eigen::Quaterniond d = euler2Quaternion(0,0,ea[2]);
+        T_WS_Constraint.set(pose_constraint.topRightCorner<3, 1>(), d);
+        //pose_constraint.topLeftCorner<2, 2>() = Eigen::Matrix2d::Identity();
 
-    LOG(INFO) << "T_WS: " << T_WS.T();
-    LOG(INFO) << "pose_constraint: " << T_WS_Constraint.T();
+        LOG(INFO) << "T_WS: " << T_WS.T();
+        LOG(INFO) << "pose_constraint: " << T_WS_Constraint.T();
 
 
-    std::shared_ptr<ceres::PoseError > poseError(new ceres::PoseError(T_WS_Constraint, information));
-    mapPtr_->addResidualBlock(poseError,NULL,poseParameterBlock);
+        std::shared_ptr<ceres::PoseError > poseError(new ceres::PoseError(T_WS_Constraint, information));
+        mapPtr_->addResidualBlock(poseError,NULL,poseParameterBlock);
+    }
+
+
   }
 
   return true;

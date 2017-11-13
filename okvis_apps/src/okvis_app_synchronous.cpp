@@ -1046,7 +1046,7 @@ class PoseViewer
     if(mouseclickpt.x>-1000 && mouseclickpt.y>-1000)
     {
         std::stringstream mctext;
-        mctext << "mouse click position = [" << mouseclickpt.x << ", " << mouseclickpt.y << "]";
+        mctext << "mouse click position = [" << mouseclickpt.x << ", " << mouseclickpt.y << "], norm=" << sqrt(mouseclickpt.x*mouseclickpt.x+mouseclickpt.y*mouseclickpt.y);
         cv::putText(_image, mctext.str(), cv::Point(485,135),
                     cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255,255,255), 1);
 
