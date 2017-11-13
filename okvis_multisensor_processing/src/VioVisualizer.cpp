@@ -131,10 +131,11 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
                       "mixed frame types are not supported yet");
   }
 
-  int total_lm_this_frame=0;
+  int total_lm_this_frame=0, total_keypt_this_frame=0;
   //observation contains all the keypoint information after each optimization loop
   for (auto it = data->observations.begin(); it != data->observations.end(); ++it)
   {
+    total_keypt_this_frame++;
     if (it->cameraIdx != image_number)
       continue;
 
@@ -266,6 +267,12 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
   cv::putText(current, currentframelm.str(), cv::Point(15,35),
               cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,0,255), 1);
 
+  std::stringstream currentframekeypt;
+  currentframekeypt << "frame #keypts= " << total_keypt_this_frame;
+  cv::putText(current, currentframekeypt.str(), cv::Point(15,55),
+              cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,0,255), 1);
+
+
   //Output whether SAD test is passed and IMU got integrated
   const double SAD_threshold_ratio = 2.5; // Sum of absolute difference threshold, a ratio to current image size
   double SAD_threshold = SAD_threshold_ratio * frame->image(0).size().height * frame->image(0).size().width;
@@ -275,7 +282,7 @@ cv::Mat VioVisualizer::drawMatches(VisualizationData::Ptr& data,
   if(SAD < SAD_threshold)
   {
       sadtest << "IMU no integration";
-      cv::putText(current, sadtest.str(), cv::Point(15,55),
+      cv::putText(current, sadtest.str(), cv::Point(15,75),
                   cv::FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(0,0,255), 2);
   }
 

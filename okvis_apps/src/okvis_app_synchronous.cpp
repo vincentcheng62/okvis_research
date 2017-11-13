@@ -48,6 +48,7 @@
 
 #define PLAY_DELAY_IN_MS (10) // 0 is stop
 #define DEFAULT_CONFIG_FILE ("../config/config_me2_inv_mancalib.yaml")
+#define FILTER_RADIUS (10) // width=radius*2+1
 
 namespace fs = std::experimental::filesystem;
 using namespace FlyCapture2;
@@ -1685,8 +1686,7 @@ int main(int argc, char **argv)
         std::sort(image_names.at(i).begin(), image_names.at(i).end());
       }
 
-      std::vector < std::vector < std::string > ::iterator
-          > cam_iterators(numCameras);
+      std::vector < std::vector < std::string > ::iterator> cam_iterators(numCameras);
       for (size_t i = 0; i < numCameras; ++i) {
         cam_iterators.at(i) = image_names.at(i).begin();
       }
@@ -1695,7 +1695,68 @@ int main(int argc, char **argv)
       okvis::Time start(0.0);
       okvis::Duration ImageDelayInSec(parameters.sensors_information.imageDelay);
 
+      //Save all imu data into a container first in order to apply filter
+      LOG(INFO) << "Save all imu data in buffer...";
+      std::vector<std::vector<double>> imu_store;
+      std::vector<double> gyro_x, gyro_y, gyro_z, acc_x, acc_y, acc_z;
+      imu_store.push_back(gyro_x);
+      imu_store.push_back(gyro_y);
+      imu_store.push_back(gyro_z);
+      imu_store.push_back(acc_x);
+      imu_store.push_back(acc_y);
+      imu_store.push_back(acc_z);
+
+      std::vector<std::vector<double>> imu_store_filtered(imu_store);
+      while (std::getline(imu_file, line))
+      {
+        std::stringstream stream(line);
+        std::string s;
+        std::getline(stream, s, ',');
+
+        //First 10 digits are seconds, remaining 9 digits are nanoseconds
+        std::string nanoseconds = s.substr(s.size() - 9, 9);
+        std::string seconds = s.substr(0, s.size() - 9);
+
+        std::vector<double> a_row_of_data;
+        for (int j = 0; j < 3; ++j) {
+          std::getline(stream, s, ',');
+          imu_store[j].push_back(std::stod(s));
+        }
+
+
+        for (int j = 0; j < 3; ++j) {
+          std::getline(stream, s, ',');
+          imu_store[j+3].push_back(std::stod(s));
+        }
+      }
+
+      LOG(INFO) << "Applying filter...";
+      for(int p=0; p<imu_store.size(); p++)
+      {
+          for(int i=0; i<imu_store[p].size(); i++)
+          {
+              double sum=0;
+              int totalvalid=0;
+              for(int j=i-FILTER_RADIUS; j<= i+FILTER_RADIUS; j++)
+              {
+                  if(j<0 || j>=imu_store[p].size()) continue;
+                  else
+                  {
+                      sum+=imu_store[p][j];
+                      totalvalid++;
+                  }
+              }
+              imu_store_filtered[p].push_back(sum/totalvalid);
+          }
+      }
+
+      imu_file.clear();
+      imu_file.seekg(0, std::ios::beg); // beg:: beginning of the stream
+      std::getline(imu_file, line); // skip a line
+
+      LOG(INFO) << "Main loop...";
       //main loop
+      long imu_readline_counter=0;
       while (true)
       {
         okvis_estimator.display(); // show all OKVIS's camera
@@ -1761,17 +1822,24 @@ int main(int argc, char **argv)
             std::string seconds = s.substr(0, s.size() - 9);
 
             Eigen::Vector3d gyr;
-            for (int j = 0; j < 3; ++j) {
-              std::getline(stream, s, ',');
-              gyr[j] = std::stod(s);
-            }
+//            for (int j = 0; j < 3; ++j) {
+//              std::getline(stream, s, ',');
+//              gyr[j] = std::stod(s);
+//            }
+            gyr[0] = imu_store_filtered[0][imu_readline_counter];
+            gyr[1] = imu_store_filtered[1][imu_readline_counter];
+            gyr[2] = imu_store_filtered[2][imu_readline_counter];
 
             Eigen::Vector3d acc;
-            for (int j = 0; j < 3; ++j) {
-              std::getline(stream, s, ',');
-              acc[j] = std::stod(s);
-            }
+//            for (int j = 0; j < 3; ++j) {
+//              std::getline(stream, s, ',');
+//              acc[j] = std::stod(s);
+//            }
 
+            acc[0] = imu_store_filtered[3][imu_readline_counter];
+            acc[1] = imu_store_filtered[4][imu_readline_counter];
+            acc[2] = imu_store_filtered[5][imu_readline_counter];
+            imu_readline_counter++;
             t_imu = okvis::Time(std::stoi(seconds), std::stoi(nanoseconds));
 
             // add the IMU measurement for (blocking) processing if imu timestamp + 1 sec > start
