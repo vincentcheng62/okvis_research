@@ -86,7 +86,7 @@ Frontend::Frontend(size_t numCameras)
           std::unique_ptr<okvis::DenseMatcher>(new okvis::DenseMatcher(1, 8, true))), // default 4: 4 matcher threads, 4 num of best, dont use distance ratio
 
       //Either one of them smaller than the below value will create a new keyframe
-      keyframeInsertionOverlapThreshold_(0.4), // default 0.6, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
+      keyframeInsertionOverlapThreshold_(0.5), // default 0.6, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
       keyframeInsertionMatchingRatioThreshold_(0.15),//default 0.2, larger value make more keyframes, but keyframes sitting too close will impose triangulation problem
 
       rotation_only_ratio_(0.9), // default is 0.8, make it larger so easier to initialize

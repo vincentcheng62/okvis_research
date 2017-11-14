@@ -144,6 +144,7 @@ bool Estimator::addStates(
     }
     speedAndBias.setZero();
     speedAndBias.segment<3>(6) = imuParametersVec_.at(0).a0; // the initial value given in the config file
+    speedAndBias.segment<3>(3) = imuParametersVec_.at(0).g0; // the initial value given in the config file
   }
   else
   {

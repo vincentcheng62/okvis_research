@@ -115,7 +115,8 @@ struct ImuParameters{
   double sigma_aw_c; ///< Accelerometer drift noise density.
   double tau;  ///< Reversion time constant of accerometer bias. [s]
   double g;  ///< Earth acceleration.
-  Eigen::Vector3d a0;  ///< Mean of the prior accelerometer bias.
+  Eigen::Vector3d a0;  ///< Mean of the prior accelerometer bias, got from calibration (i.e. imu_tk) or mean of run time bias on good dataset
+  Eigen::Vector3d g0;  ///< Mean of the prior gyro bias, got from calibration (i.e. imu_tk) or mean of run time bias on good dataset
   int rate;  ///< IMU rate in Hz.
 };
 

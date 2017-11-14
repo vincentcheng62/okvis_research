@@ -492,6 +492,8 @@ void VioParametersReader::readConfigFile(const std::string& filename) {
                     "'imu_params: g' parameter missing in configuration file.");
   OKVIS_ASSERT_TRUE(Exception, imu_params["a0"].isSeq(),
                     "'imu_params: a0' parameter missing in configuration file.");
+  OKVIS_ASSERT_TRUE(Exception, imu_params["g0"].isSeq(),
+                    "'imu_params: g0' parameter missing in configuration file.");
   OKVIS_ASSERT_TRUE(
       Exception, imu_params["imu_rate"].isInt(),
       "'imu_params: imu_rate' parameter missing in configuration file.");
@@ -510,6 +512,10 @@ void VioParametersReader::readConfigFile(const std::string& filename) {
   vioParameters_.imu.a0 = Eigen::Vector3d((double) (imu_params["a0"][0]),
                                           (double) (imu_params["a0"][1]),
                                           (double) (imu_params["a0"][2]));
+
+  vioParameters_.imu.g0 = Eigen::Vector3d((double) (imu_params["g0"][0]),
+                                          (double) (imu_params["g0"][1]),
+                                          (double) (imu_params["g0"][2]));
 
   readConfigFile_ = true;
 }
