@@ -121,7 +121,7 @@ int Frame::detect()
   OKVIS_ASSERT_TRUE_DBG(Exception, detector_ != NULL,
                         "Detector not initialised!");
 
-  int dilation_size=7;
+  int dilation_size=12; // 7 for narrow angle lense, since using wide angle lense has more features, so can set larger
   cv::Mat mask(image_.size(), CV_8UC1);
   cv::Mat element = cv::getStructuringElement( cv::MORPH_ELLIPSE, // MORPH_ELLIPSE
                                        cv::Size( 2*dilation_size + 1, 2*dilation_size+1 ),

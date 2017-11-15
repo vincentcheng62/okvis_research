@@ -242,6 +242,13 @@ class Frontend : public VioFrontendInterface {
   /// @{
 
   /// @brief Set the matching threshold.
+
+  void setkeyframeInsertionThreshold(double t1, double t2)
+  {
+    keyframeInsertionOverlapThreshold_ = t1;
+    keyframeInsertionMatchingRatioThreshold_ = t2;
+  }
+
   void setBriskMatchingThreshold(double threshold) {
     briskMatchingThreshold_ = threshold;
     initialiseBriskFeatureDetectors();

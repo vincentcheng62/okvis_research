@@ -242,6 +242,8 @@ struct Optimization{
   double detectionMatchingThreshold;
   double detectionMatchingRatioThreshold;
   double detectionMatching_best_second_min_dist;
+  double keyframeInsertionOverlapThreshold;
+  double keyframeInsertionMatchingRatioThreshold;
   double rotationOnlyThreshold; ///< the threshold to determine whether it is only orientation success initialization
   bool useMedianFilter;     ///< Use a Median filter over captured image?
   bool IsVerbose; ///< Is output all ceres solver details?

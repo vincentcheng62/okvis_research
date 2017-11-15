@@ -188,6 +188,19 @@ void VioParametersReader::readConfigFile(const std::string& filename)
       "'detection rotation only threshold' parameter missing in configuration file.");
   file["detection_options"]["rotation_only_threshold"] >> vioParameters_.optimization.rotationOnlyThreshold;
 
+  // keyframe insertion overlap threshold
+  success = file["detection_options"]["keyframeInsertionOverlapThreshold"].isReal();
+  OKVIS_ASSERT_TRUE(
+      Exception, success,
+      "'keyframeInsertionOverlapThreshold' parameter missing in configuration file.");
+  file["detection_options"]["keyframeInsertionOverlapThreshold"] >> vioParameters_.optimization.keyframeInsertionOverlapThreshold;
+
+  // keyframe insertion matching ratio threshold
+  success = file["detection_options"]["keyframeInsertionMatchingRatioThreshold"].isReal();
+  OKVIS_ASSERT_TRUE(
+      Exception, success,
+      "'keyframeInsertionMatchingRatioThreshold' parameter missing in configuration file.");
+  file["detection_options"]["keyframeInsertionMatchingRatioThreshold"] >> vioParameters_.optimization.keyframeInsertionMatchingRatioThreshold;
 
   // detection octaves
   success = file["detection_options"]["octaves"].isInt();

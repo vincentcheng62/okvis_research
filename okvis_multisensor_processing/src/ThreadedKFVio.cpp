@@ -105,6 +105,8 @@ void ThreadedKFVio::init()
   frontend_.setBriskDetectionMaximumKeypoints(parameters_.optimization.maxNoKeypoints);
   frontend_.setIsOriginalFeatureDetector(parameters_.optimization.IsOriginalFeatureDetector);
   frontend_.setRotation_only_ratio_(parameters_.optimization.rotationOnlyThreshold);
+  frontend_.setkeyframeInsertionThreshold(parameters_.optimization.keyframeInsertionOverlapThreshold,
+                                          parameters_.optimization.keyframeInsertionMatchingRatioThreshold);
 
   lastOptimizedStateTimestamp_ = okvis::Time(0.0) + temporal_imu_data_overlap;  // s.t. last_timestamp_ - overlap >= 0 (since okvis::time(-0.02) returns big number)
   lastAddedStateTimestamp_ = okvis::Time(0.0) + temporal_imu_data_overlap;  // s.t. last_timestamp_ - overlap >= 0 (since okvis::time(-0.02) returns big number)

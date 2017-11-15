@@ -402,18 +402,21 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
         || fabs(omega_S_0[2]) > imuParams.g_max
         || fabs(omega_S_1[0]) > imuParams.g_max
         || fabs(omega_S_1[1]) > imuParams.g_max
-        || fabs(omega_S_1[2]) > imuParams.g_max) {
+        || fabs(omega_S_1[2]) > imuParams.g_max)
+    {
       sigma_g_c *= 100;
-      LOG(WARNING) << "gyr saturation";
+      LOG(WARNING) << "gyr saturation, omega_S_0=" << omega_S_0.transpose() << ", omega_S_1=" << omega_S_1.transpose();
     }
 
-    if (fabs(acc_S_0[0]) > imuParams.a_max || fabs(acc_S_0[1]) > imuParams.a_max
+    if (fabs(acc_S_0[0]) > imuParams.a_max
+        || fabs(acc_S_0[1]) > imuParams.a_max
         || fabs(acc_S_0[2]) > imuParams.a_max
         || fabs(acc_S_1[0]) > imuParams.a_max
         || fabs(acc_S_1[1]) > imuParams.a_max
-        || fabs(acc_S_1[2]) > imuParams.a_max) {
+        || fabs(acc_S_1[2]) > imuParams.a_max)
+    {
       sigma_a_c *= 100;
-      LOG(WARNING) << "acc saturation";
+      LOG(WARNING) << "acc saturation, acc_S_0=" << acc_S_0.transpose() << ", acc_S_1=" << acc_S_1.transpose();
     }
 
     // actual propagation

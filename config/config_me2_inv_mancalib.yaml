@@ -35,10 +35,10 @@ imu_params:
     sigma_aw_c: 4.0e-5 # accelerometer drift noise density [m/s^2/sqrt(Hz)], used in covariance propagation, affect the information matrix of imu error
 
     tau: 3600.0 # reversion time constant, currently not in use [s]
-    g: 9.81007 # Earth's acceleration due to gravity [m/s^2]
+    g: 9.77 #9.81007 # Earth's acceleration due to gravity [m/s^2]
 
-    a0: [ -0.06, -0.11, 0.009 ] # Accelerometer bias [m/s^2] [ 0.0, 0.0, 0.0 ] [ -0.06, -0.11, 0.009 ] [ 0.065, -0.0725, 0.012 ]
-    g0: [ 0.0086777, -0.0007168, 0.01344178]  # gyro bias [rad/s^1] 
+    a0: [  0.005,  0.002, 0.005 ] # Accelerometer bias [m/s^2] [ 0.0, 0.0, 0.0 ] [ -0.06, -0.11, 0.009 ] [ 0.065, -0.0725, 0.012 ]
+    g0: [ 0.006544473, -0.003290918, 0.015892098]  # gyro bias [rad/s^1] calibrate by taking mean of imu gyro data when placing imu in stationary for 30 mins
     imu_rate: 500
     # tranform Body-Sensor (IMU)
     T_BS:
@@ -68,6 +68,8 @@ detection_options:
     maxNoKeypoints: 600  # restrict to a maximum of this many keypoints per image (strongest ones)
     IsHarris: true        # is using Fast or sse Harris corner detector (the original)
     rotation_only_threshold: 0.92   # default is 0.8, higher will make initialization easier but have a higher chance of orientation initialization only
+    keyframeInsertionOverlapThreshold: 0.6  # default is 0.6, 0.5 for narrow angle lense
+    keyframeInsertionMatchingRatioThreshold:  0.2 # default is 0.2, 0.15 for narrow angle lense
 
 # delay of images [s]:
 imageDelay: 0.00592751839443 #0.00717184698624 #0.00692948365106  # in case you are using a custom setup, you will have to calibrate this. 0 for the VISensor.
@@ -87,7 +89,7 @@ publishing_options:
     maximumLandmarkQuality: 0.05       # landmark with higher quality will be published with the maximum colour intensity
     maxPathLength: 20                  # maximum length of the published path
     publishImuPropagatedState: true    # Should the state that is propagated with IMU messages be published? Or just the optimized ones?
-    drawingmode: 1                     # 0 all types, 1 only green and yellow, 2 only green
+    drawingmode: 2                     # 0 all types, 1 only green and yellow, 2 only green
     # provide custom World frame Wc
     T_Wc_W:
         [1.0000, 0.0000, 0.0000, 0.0000,

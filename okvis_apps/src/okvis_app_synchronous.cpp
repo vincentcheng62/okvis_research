@@ -1519,7 +1519,8 @@ void MatchingAndUpdateEstimator(okvis::ThreadedKFVio &okvis_estimator)
 }
 
 // to test static imu integration result
-int main(int argc, char **argv)
+bool IsIgnoreAngleIntegration=true;
+int main12(int argc, char **argv)
 {
   google::InitGoogleLogging(argv[0]);
   FLAGS_stderrthreshold = 0;  // INFO: 0, WARNING: 1, ERROR: 2, FATAL: 3
@@ -1660,8 +1661,9 @@ int main(int argc, char **argv)
       okvis::kinematics::Transformation T_WS;
       okvis::SpeedAndBias speedAndBiases;
       speedAndBiases.segment<3>(6) = parameters.imu.a0;
-      speedAndBiases.segment<3>(3) = parameters.imu.g0;
+      if(!IsIgnoreAngleIntegration) speedAndBiases.segment<3>(3) = parameters.imu.g0;
 
+      LOG(INFO) << "IsIgnoreAngleIntegration: " << IsIgnoreAngleIntegration;
       LOG(INFO) << "gyro bias is: " <<  speedAndBiases[3] << ", " << speedAndBiases[4] << ", " << speedAndBiases[5] ;
       LOG(INFO) << "acc bias is: " <<  speedAndBiases[6] << ", " << speedAndBiases[7] << ", " << speedAndBiases[8] ;
 
@@ -1677,94 +1679,114 @@ int main(int argc, char **argv)
           if (!std::getline(imu_file, line))
           {
               fp.close();
+              std::cout << "counter= " << counter << ", imu_readline_counter=" << imu_readline_counter << endl;
               std::cout << "All imu data is extracted" << endl;
               std::cout << std::endl << "Finished. Press any key to exit." << std::endl << std::flush;
               cv::waitKey(0);
               return 0;
           }
 
-          //Data [timestamp, gyro_x, gyro_y, gyro_z, acc_x, acc_y, acc_z)
-
-          std::stringstream stream(line);
-          std::string s;
-          std::getline(stream, s, ',');
-
-          //First 10 digits are seconds, remaining 9 digits are nanoseconds
-          std::string nanoseconds = s.substr(s.size() - 9, 9);
-          std::string seconds = s.substr(0, s.size() - 9);
-
-          Eigen::Vector3d gyr;
-          gyr[0] = imu_store_filtered[0][imu_readline_counter];
-          gyr[1] = imu_store_filtered[1][imu_readline_counter];
-          gyr[2] = imu_store_filtered[2][imu_readline_counter];
-
-          Eigen::Vector3d acc;
-          acc[0] = imu_store_filtered[3][imu_readline_counter];
-          acc[1] = imu_store_filtered[4][imu_readline_counter];
-          acc[2] = imu_store_filtered[5][imu_readline_counter];
           imu_readline_counter++;
-          t_end = okvis::Time(std::stoi(seconds), std::stoi(nanoseconds));
-          if(counter==0) t_start=t_end;
 
-          okvis::ImuMeasurement imu_measurement;
-          imu_measurement.measurement.accelerometers = acc;
-          imu_measurement.measurement.gyroscopes = gyr;
-          imu_measurement.timeStamp = t_end;
-          imu_measurements.push_back(imu_measurement);
-
-          if(counter==20)
+          // sample every 20 samples
+          if(counter%20==0)
           {
-              bool success = okvis::Estimator::initPoseFromImu(imu_measurements, T_WS);
-              if(success)
-              {
-                 std::cout << "initPoseFromImu success" << endl;
-                 LOG(INFO) << "T_WS.r() is: " << std::fixed << std::setprecision(16) << T_WS.r()[0] << ", " << T_WS.r()[1] << ", " <<T_WS.r()[2] ;
+              //Data [timestamp, gyro_x, gyro_y, gyro_z, acc_x, acc_y, acc_z)
 
-                 Eigen::Vector3d ea = T_WS.C().eulerAngles(0, 1, 2);
-                 LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << ea[0] << ", " << ea[1] << ", " << ea[2] ;
+              std::stringstream stream(line);
+              std::string s;
+              std::getline(stream, s, ',');
+
+              //First 10 digits are seconds, remaining 9 digits are nanoseconds
+              std::string nanoseconds = s.substr(s.size() - 9, 9);
+              std::string seconds = s.substr(0, s.size() - 9);
+
+              Eigen::Vector3d gyr;
+              if(IsIgnoreAngleIntegration)
+              {
+                  gyr[0] = 0.0;
+                  gyr[1] = 0.0;
+                  gyr[2] = 0.0;
               }
               else
               {
-                  fp.close();
-                  std::cout << std::endl << "initPoseFromImu fails. Press any key to exit." << std::endl << std::flush;
-                  cv::waitKey(0);
-                  return 0;
+                  gyr[0] = imu_store_filtered[0][imu_readline_counter-1];
+                  gyr[1] = imu_store_filtered[1][imu_readline_counter-1];
+                  gyr[2] = imu_store_filtered[2][imu_readline_counter-1];
               }
-          }
-          else if (counter>20)
-          {
-              if(counter%200==0)
+
+
+              Eigen::Vector3d acc;
+              acc[0] = imu_store_filtered[3][imu_readline_counter-1];
+              acc[1] = imu_store_filtered[4][imu_readline_counter-1];
+              acc[2] = imu_store_filtered[5][imu_readline_counter-1];
+
+              //cout << "gyr: " << gyr.transpose() << endl;
+              //cout << "acc: " << acc.transpose() << endl;
+
+              t_end = okvis::Time(std::stoi(seconds), std::stoi(nanoseconds));
+              if(counter==0) t_start=t_end;
+
+              okvis::ImuMeasurement imu_measurement;
+              imu_measurement.measurement.accelerometers = acc;
+              imu_measurement.measurement.gyroscopes = gyr;
+              imu_measurement.timeStamp = t_end;
+              imu_measurements.push_back(imu_measurement);
+
+              if(counter==1000)
               {
-                  okvis::ceres::ImuError::propagation(imu_measurements,
-                                        parameters.imu,
-                                        T_WS,
-                                        speedAndBiases,
-                                        t_start,
-                                        t_end);
+                  //use the acceleration vector to guess the orientation
+                  bool success = okvis::Estimator::initPoseFromImu(imu_measurements, T_WS);
+                  if(success)
+                  {
+                     std::cout << "initPoseFromImu success" << endl;
+                     LOG(INFO) << "T_WS.r() is: "  << T_WS.r()[0] << ", " << T_WS.r()[1] << ", " <<T_WS.r()[2] ;
 
-                  ea = T_WS.C().eulerAngles(0, 1, 2);
+                     Eigen::Vector3d ea = T_WS.C().eulerAngles(0, 1, 2);
+                     LOG(INFO) << "T_WS.C() is: "  << ea[0] << ", " << ea[1] << ", " << ea[2] ;
+                  }
+                  else
+                  {
+                      fp.close();
+                      std::cout << std::endl << "initPoseFromImu fails. Press any key to exit." << std::endl << std::flush;
+                      cv::waitKey(0);
+                      return 0;
+                  }
+              }
+              else if (counter>100)
+              {
+                  if(counter%2000==0)
+                  {
+                      okvis::ceres::ImuError::propagation(imu_measurements,
+                                            parameters.imu,
+                                            T_WS,
+                                            speedAndBiases,
+                                            t_start,
+                                            t_end);
 
-                  std::cout << "counter=" << counter << endl;
-                  LOG(INFO) << "T_WS.r() is: " <<  T_WS.r()[0] << ", " << T_WS.r()[1] << ", " <<T_WS.r()[2] ;
-                  LOG(INFO) << "T_WS.C() is: " <<  ea[0] << ", " << ea[1] << ", " << ea[2] ;
-                  LOG(INFO) << "velocity is: " <<  speedAndBiases[0] << ", " << speedAndBiases[1] << ", " << speedAndBiases[2] ;
+                      ea = T_WS.C().eulerAngles(0, 1, 2);
+
+                      std::cout << "counter=" << counter << endl;
+                      LOG(INFO) << "T_WS.r() is: " <<  T_WS.r()[0] << ", " << T_WS.r()[1] << ", " <<T_WS.r()[2] ;
+                      LOG(INFO) << "T_WS.C() is: " <<  ea[0] << ", " << ea[1] << ", " << ea[2] ;
+                      LOG(INFO) << "velocity is: " <<  speedAndBiases[0] << ", " << speedAndBiases[1] << ", " << speedAndBiases[2] ;
+                  }
+
+                  fp << T_WS.r()[0] << ", " << T_WS.r()[1] << ", " << T_WS.r()[2] << ", ";
+                  fp << ea[0] << ", " << ea[1] << ", " << ea[2] << ", ";
+
+                  fp << speedAndBiases[0] << ", " << speedAndBiases[1] << ", " << speedAndBiases[2] << ", ";
+                  fp << endl;
               }
 
-              fp << T_WS.r()[0] << ", " << T_WS.r()[1] << ", " << T_WS.r()[2] << ", ";
-              fp << ea[0] << ", " << ea[1] << ", " << ea[2] << ", ";
-
-              fp << speedAndBiases[0] << ", " << speedAndBiases[1] << ", " << speedAndBiases[2] << ", ";
-
+              // display progress
+              if (counter % 2000 == 0)
+              {
+                progress=int(double(counter) / double(imu_store[0].size()) * 100);
+                std::cout << "\rProgress: " << progress << "%  " << std::flush;
+              }
           }
-          ++counter;
-
-          // display progress
-          if (counter % 1000 == 0)
-          {
-            progress=int(double(counter) / double(imu_store[0].size()) * 100);
-            std::cout << "\rProgress: " << progress << "%  " << std::flush;
-          }
-
+          counter++;
       }
   }
 
@@ -1773,7 +1795,7 @@ int main(int argc, char **argv)
 }
 
 // this is just a workbench. most of the stuff here will go into the Frontend class.
-int main9(int argc, char **argv)
+int main(int argc, char **argv)
 {
   google::InitGoogleLogging(argv[0]);
   FLAGS_stderrthreshold = 0;  // INFO: 0, WARNING: 1, ERROR: 2, FATAL: 3
