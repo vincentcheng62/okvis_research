@@ -3,14 +3,14 @@ cameras:
      - {T_SC:
         [0.53583846, 0.84426229,  0.00991647, -0.023,
           -0.84411237,  0.53593019, -0.01591011,  0.112,
-          -0.01874685,  0.00015463,  0.99982425,  0.0822,
+          -0.01874685,  0.00015463,  0.99982425,  0.0468,
            0.0, 0.0, 0.0, 1.0],
 
         image_dimension: [640, 512],
-        distortion_coefficients: [-0.35864871,  0.16062372, 0.00045934, -0.00113195],
+        distortion_coefficients: [-0.04955165,  0.02744712, -0.00189845, -0.00160872],
         distortion_type: radialtangential,
-        focal_length: [322.87466151, 322.25002897],
-        principal_point: [316.47753136, 264.4194561]}
+        focal_length: [432.13078374, 430.14855392],
+        principal_point: [305.71627069, 266.44839265]}
 
 
 camera_params:
@@ -60,7 +60,7 @@ ceres_options:
 
 # detection
 detection_options:
-    threshold: 30.0      # detection threshold. By default the uniformity radius in pixels
+    threshold: 8.0      # detection threshold. By default the uniformity radius in pixels
     matching_threshold: 50.0    # the threshold for the hamming distance between 2 descriptors, more strict for lower value, cannot set too low, since there are noise in images, even same physical pt descriptor will not be exactly the same
     matching_ratio_threshold: 3.0 # the ratio threshold s.t. second/best>threshold will be matched
     matching_best_second_min_dist: 20.0
@@ -70,7 +70,7 @@ detection_options:
     rotation_only_threshold: 0.92   # default is 0.8, higher will make initialization easier but have a higher chance of orientation initialization only
 
 # delay of images [s]:
-imageDelay: 0.00592751839443 #0.00717184698624 #0.00692948365106  # in case you are using a custom setup, you will have to calibrate this. 0 for the VISensor.
+imageDelay: 0.00717184698624 #0.00692948365106  # in case you are using a custom setup, you will have to calibrate this. 0 for the VISensor.
 
 # display debug images?
 displayImages: true  # displays debug video and keyframe matches. May be slow.

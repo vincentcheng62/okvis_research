@@ -73,7 +73,8 @@ VioParametersReader::VioParametersReader(const std::string& filename) {
 }
 
 // Read and parse a config file.
-void VioParametersReader::readConfigFile(const std::string& filename) {
+void VioParametersReader::readConfigFile(const std::string& filename)
+{
   vioParameters_.optimization.useMedianFilter = false;
   vioParameters_.optimization.timeReserve.fromSec(0.005);
 

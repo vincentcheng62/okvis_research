@@ -15,6 +15,7 @@
 #pragma GCC diagnostic pop
 #include <okvis/VioParametersReader.hpp>
 #include <okvis/ThreadedKFVio.hpp>
+#include <okvis/ceres/ImuError.hpp>
 #include <boost/filesystem.hpp>
 
 #include <QtSerialPort/QSerialPort>
@@ -1517,8 +1518,262 @@ void MatchingAndUpdateEstimator(okvis::ThreadedKFVio &okvis_estimator)
     }
 }
 
-// this is just a workbench. most of the stuff here will go into the Frontend class.
+// to test static imu integration result
 int main(int argc, char **argv)
+{
+  google::InitGoogleLogging(argv[0]);
+  FLAGS_stderrthreshold = 0;  // INFO: 0, WARNING: 1, ERROR: 2, FATAL: 3
+  FLAGS_colorlogtostderr = 1;
+
+  okvis::Duration deltaT(0.0);
+  if (argc == 4) {
+    deltaT = okvis::Duration(atof(argv[3]));
+  }
+
+  // read configuration file
+  std::string configFilename;
+  if(argc<2)
+  {
+      configFilename = std::string(DEFAULT_CONFIG_FILE);
+  }
+  else
+  {
+      configFilename = std::string(argv[1]);
+  }
+
+  okvis::VioParametersReader vio_parameters_reader(configFilename);
+  okvis::VioParameters parameters;
+  vio_parameters_reader.getParameters(parameters);
+
+  //okvis::ThreadedKFVio okvis_estimator(parameters);
+
+  //Also output the position, angle and velocity to result.txt
+  timespec starttime;
+  //clock_gettime(CLOCK_REALTIME, &starttime);
+  timespec_get(&starttime, TIME_UTC);
+  std::stringstream filename;
+  filename << starttime.tv_sec << "imu_integration_result.txt";
+  fp.open(filename.str(), ios::out);
+  if(!fp){
+      cout<<"Fail to open file: "<<endl;
+      std::cin.get();
+  }
+
+  fp << "pos_x, pos_y, pos_z, theta_x, theta_y, theta_z, vel_x, vel_y, vel_z" << endl;
+
+  //run offline by providing the dataset
+  if (argc>=3)
+  {
+      //okvis_estimator.setBlocking(true);
+      // the folder path
+      std::string path(argv[2]);
+
+      // open the IMU file
+      std::string line;
+      std::ifstream imu_file(path + "/imu0/data.csv");
+      if (!imu_file.good()) {
+        LOG(ERROR)<< "no imu file found at " << path+"/imu0/data.csv";
+        return -1;
+      }
+      int number_of_lines = 0;
+      while (std::getline(imu_file, line))
+        ++number_of_lines;
+      LOG(INFO)<< "No. IMU measurements: " << number_of_lines-1;
+
+      if (number_of_lines - 1 <= 0)
+      {
+        LOG(ERROR)<< "no imu messages present in " << path+"/imu0/data.csv";
+        return -1;
+      }
+
+      // set reading position to second line
+      imu_file.clear();
+      imu_file.seekg(0, std::ios::beg); // beg:: beginning of the stream
+      std::getline(imu_file, line); // skip a line
+
+      std::vector<okvis::Time> times;
+      okvis::Time latest(0);
+
+      int counter = 0;
+      okvis::Time start(0.0);
+
+      //Save all imu data into a container first in order to apply filter
+      LOG(INFO) << "Save all imu data in buffer...";
+      std::vector<std::vector<double>> imu_store;
+      std::vector<double> gyro_x, gyro_y, gyro_z, acc_x, acc_y, acc_z;
+      imu_store.push_back(gyro_x);
+      imu_store.push_back(gyro_y);
+      imu_store.push_back(gyro_z);
+      imu_store.push_back(acc_x);
+      imu_store.push_back(acc_y);
+      imu_store.push_back(acc_z);
+
+      std::vector<std::vector<double>> imu_store_filtered(imu_store);
+      while (std::getline(imu_file, line))
+      {
+        std::stringstream stream(line);
+        std::string s;
+        std::getline(stream, s, ',');
+
+        //First 10 digits are seconds, remaining 9 digits are nanoseconds
+        std::string nanoseconds = s.substr(s.size() - 9, 9);
+        std::string seconds = s.substr(0, s.size() - 9);
+
+        std::vector<double> a_row_of_data;
+        for (int j = 0; j < 3; ++j) {
+          std::getline(stream, s, ',');
+          imu_store[j].push_back(std::stod(s));
+        }
+
+
+        for (int j = 0; j < 3; ++j) {
+          std::getline(stream, s, ',');
+          imu_store[j+3].push_back(std::stod(s));
+        }
+      }
+
+      LOG(INFO) << "Applying filter...";
+      for(int p=0; p<imu_store.size(); p++)
+      {
+          for(int i=0; i<imu_store[p].size(); i++)
+          {
+              double sum=0;
+              int totalvalid=0;
+              for(int j=i-FILTER_RADIUS; j<= i+FILTER_RADIUS; j++)
+              {
+                  if(j<0 || j>=imu_store[p].size()) continue;
+                  else
+                  {
+                      sum+=imu_store[p][j];
+                      totalvalid++;
+                  }
+              }
+              imu_store_filtered[p].push_back(sum/totalvalid);
+          }
+      }
+
+      imu_file.clear();
+      imu_file.seekg(0, std::ios::beg); // beg:: beginning of the stream
+      std::getline(imu_file, line); // skip a line
+
+      okvis::ImuMeasurementDeque imu_measurements;
+      okvis::kinematics::Transformation T_WS;
+      okvis::SpeedAndBias speedAndBiases;
+      speedAndBiases.segment<3>(6) = parameters.imu.a0;
+      speedAndBiases.segment<3>(3) = parameters.imu.g0;
+
+      LOG(INFO) << "gyro bias is: " <<  speedAndBiases[3] << ", " << speedAndBiases[4] << ", " << speedAndBiases[5] ;
+      LOG(INFO) << "acc bias is: " <<  speedAndBiases[6] << ", " << speedAndBiases[7] << ", " << speedAndBiases[8] ;
+
+      okvis::Time t_start, t_end;
+      Eigen::Vector3d ea;
+
+      LOG(INFO) << "Main loop...";
+      //main loop
+      long imu_readline_counter=0;
+      while (true)
+      {
+          // get all IMU measurements
+          if (!std::getline(imu_file, line))
+          {
+              fp.close();
+              std::cout << "All imu data is extracted" << endl;
+              std::cout << std::endl << "Finished. Press any key to exit." << std::endl << std::flush;
+              cv::waitKey(0);
+              return 0;
+          }
+
+          //Data [timestamp, gyro_x, gyro_y, gyro_z, acc_x, acc_y, acc_z)
+
+          std::stringstream stream(line);
+          std::string s;
+          std::getline(stream, s, ',');
+
+          //First 10 digits are seconds, remaining 9 digits are nanoseconds
+          std::string nanoseconds = s.substr(s.size() - 9, 9);
+          std::string seconds = s.substr(0, s.size() - 9);
+
+          Eigen::Vector3d gyr;
+          gyr[0] = imu_store_filtered[0][imu_readline_counter];
+          gyr[1] = imu_store_filtered[1][imu_readline_counter];
+          gyr[2] = imu_store_filtered[2][imu_readline_counter];
+
+          Eigen::Vector3d acc;
+          acc[0] = imu_store_filtered[3][imu_readline_counter];
+          acc[1] = imu_store_filtered[4][imu_readline_counter];
+          acc[2] = imu_store_filtered[5][imu_readline_counter];
+          imu_readline_counter++;
+          t_end = okvis::Time(std::stoi(seconds), std::stoi(nanoseconds));
+          if(counter==0) t_start=t_end;
+
+          okvis::ImuMeasurement imu_measurement;
+          imu_measurement.measurement.accelerometers = acc;
+          imu_measurement.measurement.gyroscopes = gyr;
+          imu_measurement.timeStamp = t_end;
+          imu_measurements.push_back(imu_measurement);
+
+          if(counter==20)
+          {
+              bool success = okvis::Estimator::initPoseFromImu(imu_measurements, T_WS);
+              if(success)
+              {
+                 std::cout << "initPoseFromImu success" << endl;
+                 LOG(INFO) << "T_WS.r() is: " << std::fixed << std::setprecision(16) << T_WS.r()[0] << ", " << T_WS.r()[1] << ", " <<T_WS.r()[2] ;
+
+                 Eigen::Vector3d ea = T_WS.C().eulerAngles(0, 1, 2);
+                 LOG(INFO) << "T_WS.C() is: " << std::fixed << std::setprecision(16) << ea[0] << ", " << ea[1] << ", " << ea[2] ;
+              }
+              else
+              {
+                  fp.close();
+                  std::cout << std::endl << "initPoseFromImu fails. Press any key to exit." << std::endl << std::flush;
+                  cv::waitKey(0);
+                  return 0;
+              }
+          }
+          else if (counter>20)
+          {
+              if(counter%200==0)
+              {
+                  okvis::ceres::ImuError::propagation(imu_measurements,
+                                        parameters.imu,
+                                        T_WS,
+                                        speedAndBiases,
+                                        t_start,
+                                        t_end);
+
+                  ea = T_WS.C().eulerAngles(0, 1, 2);
+
+                  std::cout << "counter=" << counter << endl;
+                  LOG(INFO) << "T_WS.r() is: " <<  T_WS.r()[0] << ", " << T_WS.r()[1] << ", " <<T_WS.r()[2] ;
+                  LOG(INFO) << "T_WS.C() is: " <<  ea[0] << ", " << ea[1] << ", " << ea[2] ;
+                  LOG(INFO) << "velocity is: " <<  speedAndBiases[0] << ", " << speedAndBiases[1] << ", " << speedAndBiases[2] ;
+              }
+
+              fp << T_WS.r()[0] << ", " << T_WS.r()[1] << ", " << T_WS.r()[2] << ", ";
+              fp << ea[0] << ", " << ea[1] << ", " << ea[2] << ", ";
+
+              fp << speedAndBiases[0] << ", " << speedAndBiases[1] << ", " << speedAndBiases[2] << ", ";
+
+          }
+          ++counter;
+
+          // display progress
+          if (counter % 1000 == 0)
+          {
+            progress=int(double(counter) / double(imu_store[0].size()) * 100);
+            std::cout << "\rProgress: " << progress << "%  " << std::flush;
+          }
+
+      }
+  }
+
+  std::cout << std::endl << std::flush;
+  return 0;
+}
+
+// this is just a workbench. most of the stuff here will go into the Frontend class.
+int main9(int argc, char **argv)
 {
   google::InitGoogleLogging(argv[0]);
   FLAGS_stderrthreshold = 0;  // INFO: 0, WARNING: 1, ERROR: 2, FATAL: 3
@@ -1768,6 +2023,7 @@ int main(int argc, char **argv)
         for (size_t i = 0; i < numCameras; ++i) {
           if (cam_iterators[i] == image_names[i].end()) {
             fp.close();fp2.close();
+            std::cout << "All image data is extracted" << endl;
             std::cout << "total_length_of_travel: " << total_length_of_travel << endl;
             std::cout << std::endl << "Finished. Press any key to exit." << std::endl << std::flush;
             PrintAllLandmarks();
@@ -1804,6 +2060,7 @@ int main(int argc, char **argv)
             if (!std::getline(imu_file, line))
             {
               fp.close(); fp2.close();
+              std::cout << "All imu data is extracted" << endl;
               std::cout << "total_length_of_travel: " << total_length_of_travel << endl;
               std::cout << std::endl << "Finished. Press any key to exit." << std::endl << std::flush;
               PrintAllLandmarks();

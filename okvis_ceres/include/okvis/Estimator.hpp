@@ -189,7 +189,7 @@ class Estimator : public VioBackendInterface
    * @param[out] T_WS initialised pose.
    * @return True if successful.
    */
-  static bool initPoseFromImu(
+static bool initPoseFromImu(
       const okvis::ImuMeasurementDeque & imuMeasurements,
       okvis::kinematics::Transformation & T_WS);
 
