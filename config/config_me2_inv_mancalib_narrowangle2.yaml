@@ -3,14 +3,17 @@ cameras:
      - {T_SC:
         [0.52428196, 0.85150518,  0.00820686, -0.023,
           -0.85117033,  0.52431287, -0.02459848,  0.112,
-          -0.02524869,  0.0059111,  0.99966372,  0.0822,
+          -0.02524869,  0.0059111,  0.99966372,  0.0468,
            0.0, 0.0, 0.0, 1.0],
 
         image_dimension: [640, 512],
-        distortion_coefficients: [-0.35799317,  0.15694288, 0.00099935, -0.00149433, -0.041413, 0, 0, 0],
+        distortion_coefficients: [-1.5778383641233675e+00, -1.4850553244291584e+00,
+       -1.3388627735177892e-03, -2.3247612265460404e-03,
+       2.5346029297256796e+00, -1.5264982438192580e+00,
+       -1.6478252381087186e+00, 2.6640637591752956e+00],
         distortion_type: radialtangential8,
-        focal_length: [322.9640507, 322.9640507],
-        principal_point: [317.56224, 263.17784]}
+        focal_length: [433.552078374, 431.7465392],
+        principal_point: [304.78327069, 266.46039265]}
 
 
 camera_params:
@@ -35,10 +38,10 @@ imu_params:
     sigma_aw_c: 4.0e-5 # accelerometer drift noise density [m/s^2/sqrt(Hz)], used in covariance propagation, affect the information matrix of imu error
 
     tau: 3600.0 # reversion time constant, currently not in use [s]
-    g: 9.77 #9.81007 # Earth's acceleration due to gravity [m/s^2]
+    g: 9.81007 # Earth's acceleration due to gravity [m/s^2]
 
     a0: [  0.005,  0.002, 0.005 ] # Accelerometer bias [m/s^2] [ 0.0, 0.0, 0.0 ] [ -0.06, -0.11, 0.009 ] [ 0.065, -0.0725, 0.012 ]
-    g0: [ 0.006544473, -0.003290918, 0.015892098]  # gyro bias [rad/s^1] calibrate by taking mean of imu gyro data when placing imu in stationary for 30 mins
+    g0: [0.006544473, -0.003290918, 0.015892098]  # gyro bias [rad/s^1] 
     imu_rate: 500
     # tranform Body-Sensor (IMU)
     T_BS:
@@ -60,7 +63,7 @@ ceres_options:
 
 # detection
 detection_options:
-    threshold: 30.0      # detection threshold. By default the uniformity radius in pixels
+    threshold: 8.0      # detection threshold. By default the uniformity radius in pixels
     matching_threshold: 50.0    # the threshold for the hamming distance between 2 descriptors, more strict for lower value, cannot set too low, since there are noise in images, even same physical pt descriptor will not be exactly the same
     matching_ratio_threshold: 3.0 # the ratio threshold s.t. second/best>threshold will be matched
     matching_best_second_min_dist: 20.0
@@ -68,11 +71,11 @@ detection_options:
     maxNoKeypoints: 600  # restrict to a maximum of this many keypoints per image (strongest ones)
     IsHarris: true        # is using Fast or sse Harris corner detector (the original)
     rotation_only_threshold: 0.92   # default is 0.8, higher will make initialization easier but have a higher chance of orientation initialization only
-    keyframeInsertionOverlapThreshold: 0.6  # default is 0.6, 0.5 for narrow angle lense
-    keyframeInsertionMatchingRatioThreshold:  0.2 # default is 0.2, 0.15 for narrow angle lense
+    keyframeInsertionOverlapThreshold: 0.5  # default is 0.6, 0.5 for narrow angle lense
+    keyframeInsertionMatchingRatioThreshold:  0.15 # default is 0.2, 0.15 for narrow angle lense
 
 # delay of images [s]:
-imageDelay: 0.00592751839443 #0.00717184698624 #0.00692948365106  # in case you are using a custom setup, you will have to calibrate this. 0 for the VISensor.
+imageDelay: 0.00717184698624 #0.00692948365106  # in case you are using a custom setup, you will have to calibrate this. 0 for the VISensor.
 
 # display debug images?
 displayImages: true  # displays debug video and keyframe matches. May be slow.

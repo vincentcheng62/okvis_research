@@ -107,8 +107,7 @@ void Estimator::clearImus(){
   imuParametersVec_.clear();
 }
 
-Eigen::Quaterniond
-euler2Quaternion( const double roll,
+Eigen::Quaterniond euler2Quaternion( const double roll,
                   const double pitch,
                   const double yaw )
 {
@@ -172,20 +171,26 @@ bool Estimator::addStates(
     LOG(INFO) << "SAD= " << SAD << ", SAD_threshold= " << SAD_threshold << ", threshold_ratio= " << SAD_threshold_ratio;
     if( SAD > SAD_threshold)
     {
+        //Domain knowledge constraint, z-axis has no movement, so set z-velocity=0
+        //Since z-velocity after optimization of last round, it becomes non-zero
+        //Set it to close to zero to avoid imu propagate in wrong direction
+        //if(multiFrame->id()>6000) // add constraint after initialization is stable
+        //{
+            const double scaledownfactor = 0.1;
+//            Eigen::Vector3d temp_r = T_WS.r();
+//            temp_r[2] *= scaledownfactor;
+
+//            Eigen::Vector3d ea = T_WS.C().eulerAngles(0, 1, 2);
+//            Eigen::Quaterniond d = euler2Quaternion(ea[0],ea[1],ea[2]);
+
+            //T_WS.set(temp_r, d);
+            speedAndBias[2] *= scaledownfactor;
+        //}
+
         // propagate pose and speedAndBias
         int numUsedImuMeasurements = ceres::ImuError::propagation(
             imuMeasurements, imuParametersVec_.at(0), T_WS, speedAndBias,
             statesMap_.rbegin()->second.timestamp, multiFrame->timestamp());
-
-        //Domain knowledge constraint, z-axis has no movement, so set z-depth and z-velocity=0
-    //    if(multiFrame->id()>6000) // add constraint after initialization is stable
-    //    {
-    //          Eigen::Vector3d temp_r = T_WS.r();
-    //          temp_r[2]=0;
-    //          T_WS.set(temp_r,T_WS.q());
-    //          speedAndBias[2] = 0;
-    //    }
-
 
         LOG(INFO) << numUsedImuMeasurements << " imu measurements are propagated in addStates()";
         LOG(INFO) << "Start: " << statesMap_.rbegin()->second.timestamp << ", end: " << multiFrame->timestamp();

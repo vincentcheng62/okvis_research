@@ -373,13 +373,15 @@ void VioParametersReader::readConfigFile(const std::string& filename)
     LOG(FATAL) << "Did not find any calibration!";
 
   size_t camIdx = 0;
-  for (size_t i = 0; i < calibrations.size(); ++i) {
+  for (size_t i = 0; i < calibrations.size(); ++i)
+  {
 
     std::shared_ptr<const okvis::kinematics::Transformation> T_SC_okvis_ptr(
           new okvis::kinematics::Transformation(calibrations[i].T_SC.r(),
                                                 calibrations[i].T_SC.q().normalized()));
 
-    if (strcmp(calibrations[i].distortionType.c_str(), "equidistant") == 0) {
+    if (strcmp(calibrations[i].distortionType.c_str(), "equidistant") == 0)
+    {
       vioParameters_.nCameraSystem.addCamera(
           T_SC_okvis_ptr,
           std::shared_ptr<const okvis::cameras::CameraBase>(
@@ -401,8 +403,10 @@ void VioParametersReader::readConfigFile(const std::string& filename)
       s << calibrations[i].T_SC.T();
       LOG(INFO) << "Equidistant pinhole camera " << camIdx
                 << " with T_SC=\n" << s.str();
-    } else if (strcmp(calibrations[i].distortionType.c_str(), "radialtangential") == 0
-               || strcmp(calibrations[i].distortionType.c_str(), "plumb_bob") == 0) {
+    }
+    else if (strcmp(calibrations[i].distortionType.c_str(), "radialtangential") == 0
+               || strcmp(calibrations[i].distortionType.c_str(), "plumb_bob") == 0)
+    {
       vioParameters_.nCameraSystem.addCamera(
           T_SC_okvis_ptr,
           std::shared_ptr<const okvis::cameras::CameraBase>(
@@ -424,8 +428,10 @@ void VioParametersReader::readConfigFile(const std::string& filename)
       s << calibrations[i].T_SC.T();
       LOG(INFO) << "Radial tangential pinhole camera " << camIdx
                 << " with T_SC=\n" << s.str();
-    } else if (strcmp(calibrations[i].distortionType.c_str(), "radialtangential8") == 0
-               || strcmp(calibrations[i].distortionType.c_str(), "plumb_bob8") == 0) {
+    }
+    else if (strcmp(calibrations[i].distortionType.c_str(), "radialtangential8") == 0
+               || strcmp(calibrations[i].distortionType.c_str(), "plumb_bob8") == 0)
+    {
       vioParameters_.nCameraSystem.addCamera(
           T_SC_okvis_ptr,
           std::shared_ptr<const okvis::cameras::CameraBase>(

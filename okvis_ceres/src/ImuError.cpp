@@ -301,6 +301,18 @@ int ImuError::redoPreintegration(const okvis::kinematics::Transformation& /*T_WS
   return i;
 }
 
+Eigen::Quaterniond euler2Quaternion( const double roll,
+                  const double pitch,
+                  const double yaw )
+{
+    Eigen::AngleAxisd rollAngle(roll, Eigen::Vector3d::UnitX());
+    Eigen::AngleAxisd pitchAngle(pitch, Eigen::Vector3d::UnitY());
+    Eigen::AngleAxisd yawAngle(yaw, Eigen::Vector3d::UnitZ());
+
+    Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;
+    return q;
+}
+
 // Propagates pose, speeds and biases with given IMU measurements.
 // Return how many imu measurements are propagated
 int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
@@ -511,11 +523,16 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
   const Eigen::Vector3d g_W = imuParams.g * Eigen::Vector3d(0, 0, 6371009).normalized();
   //g_W = (0,0,9.81007)
 
+   Eigen::Matrix3d C_WS_Constrainted;
+   Eigen::Vector3d ea = C_WS_0.eulerAngles(0, 1, 2);
+   Eigen::Quaterniond d = euler2Quaternion(0.1*ea[0],0.1*ea[1],ea[2]);
+   C_WS_Constrainted = d.matrix();
+
   //update pose (from original (r_0, q_WS_0) to frame it)
   //speedAndBiases is w.r.t. world coord
   //acc_doubleintegral += acc_integral*dt + 0.5*(C + C_1)*(0.5*acc_S_true*dt*dt);s=ut+0.5(at^2)
   T_WS.set(r_0+speedAndBiases.head<3>()*Delta_t // original position + speed * deltaT
-             + C_WS_0*(acc_doubleintegral/*-C_doubleintegral*speedAndBiases.segment<3>(6)*/)
+             + C_WS_Constrainted*(acc_doubleintegral/*-C_doubleintegral*speedAndBiases.segment<3>(6)*/)
              - 0.5*g_W*Delta_t*Delta_t, //-0.5(at^2)
              // if stand still, C_WS_0*acc_doubleintegral == 0.5*g_W*Delta_t*Delta_t
 
@@ -524,18 +541,23 @@ int ImuError::propagation(const okvis::ImuMeasurementDeque & imuMeasurements,
 
   //update speed only?
   // acc_integral += 0.5*(C + C_1)*acc_S_true*dt each round
-  speedAndBiases.head<3>() += C_WS_0*(acc_integral/*-C_integral*speedAndBiases.segment<3>(6)*/)
+  speedAndBiases.head<3>() += C_WS_Constrainted*(acc_integral/*-C_integral*speedAndBiases.segment<3>(6)*/)
                                 -g_W*Delta_t; // accumulated velocity decrement during the whole propagation period
 
   //Domain knowledge constraint, z-axis has no movement, so set z-depth and z-velocity=0
   //Setting here affect the display and the T_WS used in matching and triangulation
-//    if(multiFrame->id()>6000) // add constraint after initialization is stable
-//    {
+    //if(multiFrame->id()>6000) // add constraint after initialization is stable
+    //{
+//      const double scaledownfactor = 0.1;
 //      Eigen::Vector3d temp_r = T_WS.r();
-//      temp_r[2]=0;
-//      T_WS.set(temp_r,T_WS.q());
-//      speedAndBiases[2] = 0;
-//    }
+//      temp_r[2] *= scaledownfactor;
+
+//      Eigen::Vector3d ea = T_WS.C().eulerAngles(0, 1, 2);
+//      Eigen::Quaterniond d = euler2Quaternion(scaledownfactor*ea[0],scaledownfactor*ea[1],ea[2]);
+
+//      T_WS.set(temp_r, d);
+//      speedAndBiases[2] *= scaledownfactor;
+    //}
 
   // assign Jacobian, if requested
   if (jacobian)

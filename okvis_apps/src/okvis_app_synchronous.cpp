@@ -2064,6 +2064,27 @@ int main(int argc, char **argv)
               cv::IMREAD_GRAYSCALE);
           //cout << "filtered.type(): " << filtered.type() << endl;
 
+//          cv::Mat undistorted;
+//          cv::Mat cameraMatrix(3,3,cv::DataType<double>::type);
+//          cv::setIdentity(cameraMatrix);
+//          cameraMatrix.at<double>(0,0) = 322.9640507;
+//          cameraMatrix.at<double>(1,1) = 322.9640507;
+//          cameraMatrix.at<double>(0,2) = 317.56224;
+//          cameraMatrix.at<double>(1,2) = 263.17784;
+
+//          cv::Mat distCoeffs(8,1,cv::DataType<double>::type);
+//          distCoeffs.at<double>(0) = 13.81015702000825;
+//          distCoeffs.at<double>(1) = 62.86451116645723;
+//          distCoeffs.at<double>(2) = 0.0005741090574055188;
+//          distCoeffs.at<double>(3) = -0.0009235371884731724;
+//          distCoeffs.at<double>(4) = 12.08773223087184;
+//          distCoeffs.at<double>(5) = 14.25309944908682;
+//          distCoeffs.at<double>(6) = 67.46149137915133;
+//          distCoeffs.at<double>(7) = 35.5717123431162;
+
+//          cv::undistort(filtered, undistorted, cameraMatrix, distCoeffs);
+
+
           //The image name contains the second and nanoseconds of the capture time + ".png"
           std::string nanoseconds = cam_iterators.at(i)->substr(
               cam_iterators.at(i)->size() - 13, 9);
@@ -2131,7 +2152,7 @@ int main(int argc, char **argv)
 
           // add the image to the frontend for (blocking) processing if image timestamp > start
           if (t - start > deltaT) {
-            okvis_estimator.addImage(t, i, filtered);
+            okvis_estimator.addImage(t, i, filtered); //filtered, undistorted
           }
 
           cam_iterators[i]++;
